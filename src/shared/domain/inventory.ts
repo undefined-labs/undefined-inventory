@@ -210,8 +210,17 @@ export function moveItem(
   count: number,
   defOf: (name: string) => ItemDefinition,
 ): MoveResult {
+  // A no-op self-move would have the merge/swap branches write the same slot twice and lose
+  // units, so reject it before reading the source.
+  if (from === to && fromSlot === toSlot) throw new InventoryError('source and target are the same slot')
+
   const source = from.getSlot(fromSlot)
   if (!source) throw new InventoryError('source slot is empty')
+
+  // Guard count against the source up front: the empty-target branch trusts it blindly, so an
+  // over-count there would conjure units at the target and underflow the source into a dupe.
+  if (count <= 0) throw new InventoryError('count must be positive')
+  if (count > source.count) throw new InventoryError('count exceeds source stack')
 
   const sourceDef = defOf(source.name)
   const target = to.getSlot(toSlot)

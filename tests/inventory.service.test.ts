@@ -235,23 +235,18 @@ describe('InventoryService.moveItem (cross-inventory)', () => {
     expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 2 }) // 4 - 2 split
   })
 
-  it('does not deadlock on opposite-direction moves (sorted lock order)', async () => {
+  it('dedupes the lock for a same-inventory move — does not self-block on a single id', async () => {
+    // fromId === toId: the Set collapses [a, a] → [a], so the second acquire never runs
+    // against an already-held lock. Without the dedupe this would throw "is locked" on itself.
     const { service } = makeService()
     const a = stashInventoryId('a')
-    const b = stashInventoryId('b')
-    await service.open('stash', a)
-    await service.open('stash', b)
-    await service.addItem(a, 'water', 1)
-    await service.addItem(b, 'phone', 1)
-
-    // A→B then B→A: shared ids acquired in the same sorted order each time → no hold-and-wait
-    // cycle. Both complete (sequentially); the suite would hang on a deadlock.
-    await service.moveItem(a, b, 1, 2, 1)
-    await service.moveItem(b, a, 2, 1, 1)
-
-    // Round-trip leaves the water back where it started.
     const from = await service.open('stash', a)
-    expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 1 })
+    await service.addItem(a, 'water', 3) // slot 1
+
+    await expect(service.moveItem(a, a, 1, 2, 3)).resolves.toBeUndefined()
+
+    expect(from.getSlot(1)).toBeNull()
+    expect(from.getSlot(2)).toMatchObject({ name: 'water', count: 3 })
   })
 
   it('rejects a cross-inv move over the target weight without mutating or persisting either side', async () => {

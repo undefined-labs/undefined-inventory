@@ -116,17 +116,51 @@ describe('moveItem — atomic rejection of a partial swap', () => {
   })
 })
 
+describe('moveItem — count guards (item-conservation)', () => {
+  test('a count larger than the source stack throws, conjuring no units', () => {
+    const a = inv()
+    a.setSlot(1, water, 3)
+
+    // Empty target branch trusts count blindly: 5 onto empty slot 2 would underflow source to
+    // -2 (cleared) while slot 2 gains 5 — a net dupe. Must throw, mutating nothing.
+    expect(() => moveItem(a, a, 1, 2, 5, defOf)).toThrow()
+
+    expect(a.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
+    expect(a.getSlot(2)).toBeNull()
+  })
+
+  test('a non-positive count throws rather than emitting a no-op move', () => {
+    const a = inv()
+    a.setSlot(1, water, 3)
+
+    expect(() => moveItem(a, a, 1, 2, 0, defOf)).toThrow()
+
+    expect(a.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
+    expect(a.getSlot(2)).toBeNull()
+  })
+
+  test('moving a slot onto itself throws instead of corrupting the stack', () => {
+    const a = inv()
+    a.setSlot(1, water, 3)
+
+    // from === to && fromSlot === toSlot: the merge branch would write slot 1 twice
+    // (count+moved, then count-moved), silently dropping `moved` units. Must throw.
+    expect(() => moveItem(a, a, 1, 1, 3, defOf)).toThrow()
+
+    expect(a.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
+  })
+})
+
 describe('moveItem — weight rules', () => {
   test('same-inv move is weight-exempt even when the inventory is already over capacity', () => {
-    // maxWeight 500g; the inventory is already over (8 ammo = 80g... bump to clear over-cap).
-    // Use a tight bag that is already at the brim, then rearrange within it.
-    const a = new Inventory('player:1', 'player', cap(5, 80)) // 80g cap
-    a.setSlot(1, ammo, 8) // 8 × 10g = 80g — exactly full
+    // Genuinely over its own cap: 90g held against an 80g cap. A cross-inv move would reject;
+    // a same-inv one shifts no net weight, so it must succeed even from an over-full bag.
+    const a = new Inventory('player:1', 'player', cap(5, 80))
+    a.setSlot(1, ammo, 9) // 9 × 10g = 90g — over the 80g cap
 
-    // Relocating within the same inventory shifts no net weight → must succeed.
-    moveItem(a, a, 1, 3, 8, defOf)
+    moveItem(a, a, 1, 3, 9, defOf) // whole stack to an empty slot
 
-    expect(a.getSlot(3)).toMatchObject({ name: 'ammo', count: 8 })
+    expect(a.getSlot(3)).toMatchObject({ name: 'ammo', count: 9 })
     expect(a.getSlot(1)).toBeNull()
   })
 
