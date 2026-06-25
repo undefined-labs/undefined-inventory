@@ -54,3 +54,9 @@ export interface Capacity {
   slots: number
   maxWeight: number
 }
+
+/**
+ * Open-ended context passed through `open` to the policies (capacity/access). Carries
+ * per-open hints (e.g. a container's holder item) without coupling them to the service.
+ */
+export type InventoryContext = Record<string, unknown>

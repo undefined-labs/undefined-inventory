@@ -10,7 +10,9 @@
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
-    "types": ["node", "vitest/globals"]
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "types": ["node", "vitest/globals", "reflect-metadata"]
   },
   "include": ["src", "tests"]
 }

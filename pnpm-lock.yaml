@@ -8,9 +8,21 @@ importers:
 
   .:
     devDependencies:
+      '@citizenfx/server':
+        specifier: 2.0.31623-1
+        version: 2.0.31623-1
+      '@open-core/framework':
+        specifier: ^1.1.0
+        version: 1.1.0(reflect-metadata@0.2.2)(tsyringe@4.10.0)(zod@4.4.3)
       '@types/node':
         specifier: ^24.5.2
         version: 24.13.2
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      tsyringe:
+        specifier: ^4.10.0
+        version: 4.10.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -19,6 +31,9 @@ importers:
         version: 2.1.9(@types/node@24.13.2)
 
 packages:
+
+  '@citizenfx/server@2.0.31623-1':
+    resolution: {integrity: sha512-WumO6Ls2dsQ2CHJftgV/Fa9G+oS+fDS8w4gwfWDHgdtXXU80YFEo8ArN1v5bOGtvvJh01iXHhV/P8kMbINYXjg==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -160,6 +175,13 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@open-core/framework@1.1.0':
+    resolution: {integrity: sha512-Z6DRVyNedVvnt5vabxZVE7Xyo1uoiahA59DOvNmiQ2KIcWjmN4UaQjEuVD09riYatrQykD/1x55zI/AgRD1Emg==}
+    peerDependencies:
+      reflect-metadata: ^0.2.2
+      tsyringe: ^4.10.0
+      zod: ^4.3.5
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     resolution: {integrity: sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==}
@@ -398,6 +420,9 @@ packages:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
 
+  reflect-metadata@0.2.2:
+    resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
+
   rollup@4.62.2:
     resolution: {integrity: sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
@@ -434,6 +459,13 @@ packages:
     resolution: {integrity: sha512-n1cw8k1k0x4pgA2+9XrOkFydTerNcJ1zWCO5Nn9scWHTD+5tp8dghT2x1uduQePZTZgd3Tupf+x9BxJjeJi77Q==}
     engines: {node: '>=14.0.0'}
 
+  tslib@1.14.1:
+    resolution: {integrity: sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==}
+
+  tsyringe@4.10.0:
+    resolution: {integrity: sha512-axr3IdNuVIxnaK5XGEUFTu3YmAQ6lllgrvqfEoR16g/HGnYY/6We4oWENtAnzK6/LpJ2ur9PAb80RBt7/U4ugw==}
+    engines: {node: '>= 6.0.0'}
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -441,6 +473,10 @@ packages:
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+
+  uuid@13.0.2:
+    resolution: {integrity: sha512-vzi9uRZ926x4XV73S/4qQaTwPXM2JBj6/6lI/byHH1jOpCzb0zDbfytgA9LcN/hzb2l7WQSQnxITOVx5un/wGw==}
+    hasBin: true
 
   vite-node@2.1.9:
     resolution: {integrity: sha512-AM9aQ/IPrW/6ENLQg3AGY4K1N2TGZdR5e4gu/MmmR2xR3Ll1+dib+nook92g4TV3PXVyeyxdWwtaCAiUL0hMxA==}
@@ -508,7 +544,12 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
+
+  '@citizenfx/server@2.0.31623-1': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
@@ -580,6 +621,13 @@ snapshots:
     optional: true
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@open-core/framework@1.1.0(reflect-metadata@0.2.2)(tsyringe@4.10.0)(zod@4.4.3)':
+    dependencies:
+      reflect-metadata: 0.2.2
+      tsyringe: 4.10.0
+      uuid: 13.0.2
+      zod: 4.4.3
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     optional: true
@@ -781,6 +829,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
+  reflect-metadata@0.2.2: {}
+
   rollup@4.62.2:
     dependencies:
       '@types/estree': 1.0.9
@@ -830,9 +880,17 @@ snapshots:
 
   tinyspy@3.0.2: {}
 
+  tslib@1.14.1: {}
+
+  tsyringe@4.10.0:
+    dependencies:
+      tslib: 1.14.1
+
   typescript@5.9.3: {}
 
   undici-types@7.18.2: {}
+
+  uuid@13.0.2: {}
 
   vite-node@2.1.9(@types/node@24.13.2):
     dependencies:
@@ -900,3 +958,5 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  zod@4.4.3: {}
