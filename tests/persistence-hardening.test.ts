@@ -1,31 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { ItemRegistryContract } from '../src/shared/contracts/item-registry.contract'
-import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
 import { InventoryStoreContract } from '../src/shared/contracts/inventory-store.contract'
-import { ItemDefinition, SerializedInventory } from '../src/shared/types/item.types'
+import { SerializedInventory } from '../src/shared/types/item.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
-import { InventoryRegistry } from '../src/server/registry/inventory.registry'
-import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
-import { InventoryEvents } from '../src/server/events/inventory-events'
-import { DirtySet } from '../src/server/subscribers/dirty-set'
-import { SaveScheduler } from '../src/server/subscribers/save-scheduler'
-import { InventoryService } from '../src/server/services/inventory.service'
-
-const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
-}
-
-class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
-    return ITEMS[name] ?? null
-  }
-}
-
-class FixedCapacityPolicy extends CapacityPolicyContract {
-  resolve(): { slots: number; maxWeight: number } {
-    return { slots: 10, maxWeight: 5000 }
-  }
-}
+import { makeRig } from './persistence-rig'
 
 /**
  * A store the test fully controls: it can be made to fail the next save, and to
@@ -42,23 +19,22 @@ class ControllableStore extends InventoryStoreContract {
   private failNext = false
   private gate: Promise<void> | null = null
   private releaseGate: (() => void) | null = null
+  private onEnter: (() => void) | null = null
 
   /** The next saveMany rejects. */
   failOnce(): void {
     this.failNext = true
   }
 
-  /** Block the next saveMany until `release()` is called. Returns a promise that
-   * resolves once saveMany has actually entered (so the test can interleave). */
+  /**
+   * Block the next saveMany until `release()` is called. The returned `entered`
+   * promise resolves once saveMany has actually entered, so the test can interleave.
+   */
   block(): { entered: Promise<void>; release: () => void } {
-    let onEnter!: () => void
-    const entered = new Promise<void>((r) => (onEnter = r))
+    const entered = new Promise<void>((r) => (this.onEnter = r))
     this.gate = new Promise<void>((r) => (this.releaseGate = r))
-    this.onEnter = onEnter
     return { entered, release: () => this.releaseGate?.() }
   }
-
-  private onEnter: (() => void) | null = null
 
   async load(id: string): Promise<SerializedInventory | null> {
     const snap = this.snapshots.get(id)
@@ -86,21 +62,6 @@ class ControllableStore extends InventoryStoreContract {
       this.inFlight--
     }
   }
-}
-
-function makeRig(store: ControllableStore) {
-  const registry = new InventoryRegistry()
-  const dirty = new DirtySet(InventoryEvents)
-  const service = new InventoryService(
-    store,
-    new StaticItemRegistry(),
-    new FixedCapacityPolicy(),
-    registry,
-    new InMemoryInventoryLock(),
-    InventoryEvents,
-  )
-  const scheduler = new SaveScheduler(store, registry, dirty)
-  return { store, registry, dirty, scheduler, service }
 }
 
 describe('persistence hardening', () => {
