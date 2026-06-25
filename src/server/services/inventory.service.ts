@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe'
 import type { OpenCoreServerLibrary } from '@open-core/framework/server'
-import { Inventory } from '../../shared/domain/inventory'
+import { Inventory, moveItem } from '../../shared/domain/inventory'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
@@ -62,6 +62,49 @@ export class InventoryService {
   }
 
   /**
+   * Move/split/swap/merge between two slots, within one inventory or across two. Locks are
+   * taken in sorted, deduped id order so concurrent moves on overlapping ids serialize
+   * without deadlock. Cross-inventory writes go straight to `saveMany` in one transaction —
+   * a crash can't leave one side moved and the other not (write-behind would risk that).
+   */
+  async moveItem(
+    fromId: string,
+    toId: string,
+    fromSlot: number,
+    toSlot: number,
+    count: number,
+  ): Promise<void> {
+    const ids = [...new Set([fromId, toId])].sort()
+    const acquired: string[] = []
+    try {
+      for (const id of ids) {
+        if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
+        acquired.push(id)
+      }
+
+      const from = this.requireOpen(fromId)
+      const to = this.requireOpen(toId)
+      const { fromChanged, toChanged } = moveItem(
+        from,
+        to,
+        fromSlot,
+        toSlot,
+        count,
+        (name) => this.requireItem(name),
+      )
+
+      this.emitChanged(from, [fromChanged], 'move')
+      if (to !== from) this.emitChanged(to, [toChanged], 'move')
+
+      // Persist both sides atomically. Same-inv → one snapshot (dedupe via the live set).
+      const snapshots = [...new Set([from, to])].map((inv) => inv.serialize())
+      await this.store.saveMany(snapshots)
+    } finally {
+      for (const id of acquired.reverse()) this.locks.release(id)
+    }
+  }
+
+  /**
    * Run a single-inventory domain mutation and emit `inventory:changed`. The lock is held
    * across awaits so a concurrent mutation on the same id can't interleave. Persistence is
    * left to the DirtySet subscriber listening on the event.
@@ -73,9 +116,7 @@ export class InventoryService {
   ): Promise<void> {
     if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
     try {
-      const inv = this.registry.get(id)
-      if (!inv) throw new InventoryError(`inventory '${id}' is not open`)
-
+      const inv = this.requireOpen(id)
       const changed = op(inv)
       this.emitChanged(inv, changed, reason)
     } finally {
@@ -97,6 +138,12 @@ export class InventoryService {
       reason,
     }
     this.events.emit('changed', event)
+  }
+
+  private requireOpen(id: string): Inventory {
+    const inv = this.registry.get(id)
+    if (!inv) throw new InventoryError(`inventory '${id}' is not open`)
+    return inv
   }
 
   private requireItem(name: string): ItemDefinition {

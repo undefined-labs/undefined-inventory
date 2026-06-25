@@ -133,6 +133,25 @@ export class Inventory {
     return this.items.get(slotNumber) ?? null
   }
 
+  /**
+   * Low-level placement of a known stack into a specific slot, used by `moveItem`. Bypasses
+   * the merge/spill planner: the caller has already decided the exact slot and count. Pass
+   * `count <= 0` to clear the slot. Weight is recomputed from the supplied definition.
+   */
+  setSlot(slotNumber: number, def: ItemDefinition, count: number, metadata?: Meta): void {
+    if (count <= 0) {
+      this.items.delete(slotNumber)
+      return
+    }
+    this.items.set(slotNumber, {
+      slot: slotNumber,
+      name: def.name,
+      count,
+      weight: def.weight * count,
+      metadata,
+    })
+  }
+
   getItems(): Slot[] {
     return [...this.items.values()]
   }
@@ -171,6 +190,77 @@ export class Inventory {
       .filter((slot) => slot.name === itemName && sameMeta(slot.metadata, metadata))
       .sort((a, b) => a.slot - b.slot)
   }
+}
+
+/** The slot numbers a `moveItem` touched, so the caller can emit precise `changed`s. */
+export interface MoveResult {
+  fromChanged: number
+  toChanged: number
+}
+
+/**
+ * Relocate units between slots — move, split, merge, or swap, decided by the target slot's
+ * state. `defOf` resolves per-unit weight (keeps the domain free of the item registry).
+ */
+export function moveItem(
+  from: Inventory,
+  to: Inventory,
+  fromSlot: number,
+  toSlot: number,
+  count: number,
+  defOf: (name: string) => ItemDefinition,
+): MoveResult {
+  // A no-op self-move would have the merge/swap branches write the same slot twice and lose
+  // units, so reject it before reading the source.
+  if (from === to && fromSlot === toSlot) throw new InventoryError('source and target are the same slot')
+
+  const source = from.getSlot(fromSlot)
+  if (!source) throw new InventoryError('source slot is empty')
+
+  // Guard count against the source up front: the empty-target branch trusts it blindly, so an
+  // over-count there would conjure units at the target and underflow the source into a dupe.
+  if (count <= 0) throw new InventoryError('count must be positive')
+  if (count > source.count) throw new InventoryError('count exceeds source stack')
+
+  const sourceDef = defOf(source.name)
+  const target = to.getSlot(toSlot)
+  const crossInv = from !== to
+
+  // A move within one inventory shifts no net weight, so it stays weight-exempt (even when
+  // already over capacity). Across two, the weight arriving at `to` is validated up front.
+  const guardTargetWeight = (delta: number): void => {
+    if (crossInv && to.weight + delta > to.maxWeight)
+      throw new InventoryError('exceeds target max weight')
+  }
+
+  // Empty target → move (whole stack) or split (partial); remainder stays at source.
+  if (!target) {
+    guardTargetWeight(sourceDef.weight * count)
+    to.setSlot(toSlot, sourceDef, count, source.metadata)
+    from.setSlot(fromSlot, sourceDef, source.count - count, source.metadata)
+    return { fromChanged: fromSlot, toChanged: toSlot }
+  }
+
+  // Same item + same meta + stackable → merge up to cap; remainder stays at source.
+  if (sourceDef.stack && target.name === source.name && sameMeta(target.metadata, source.metadata)) {
+    const cap = sourceDef.maxStack ?? Infinity
+    const moved = Math.min(count, cap - target.count)
+    guardTargetWeight(sourceDef.weight * moved)
+    to.setSlot(toSlot, sourceDef, target.count + moved, target.metadata)
+    from.setSlot(fromSlot, sourceDef, source.count - moved, source.metadata)
+    return { fromChanged: fromSlot, toChanged: toSlot }
+  }
+
+  // Occupied by a different item / non-stack / meta-mismatch → swap. Only a whole-stack
+  // move can swap; a partial count would have nowhere to put the leftover.
+  if (count !== source.count) throw new InventoryError('partial swap is not allowed')
+
+  const targetDef = defOf(target.name)
+  // Swap exchanges stacks: `to` loses the target's weight and gains the source's.
+  guardTargetWeight(sourceDef.weight * source.count - targetDef.weight * target.count)
+  to.setSlot(toSlot, sourceDef, source.count, source.metadata)
+  from.setSlot(fromSlot, targetDef, target.count, target.metadata)
+  return { fromChanged: fromSlot, toChanged: toSlot }
 }
 
 /** Order-independent, deep metadata equality. */
