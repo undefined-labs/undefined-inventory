@@ -11,3 +11,8 @@ This project is an inventory library for Opencore, a TypeScript-first framework 
 
 - Keep JSDoc lean: summarise *what* a function does, not *how*. Don't narrate internals — the code shows those.
 - Use targeted inline comments only for the non-obvious "why" (an invariant, a trap, a deliberate divergence from ox_inventory).
+
+## Pull requests
+
+- Keep the PR body lean — a general overview of what changed and why, not a detailed walkthrough. Skip exhaustive file-by-file or line-by-line narration to keep output minimal.
+- Link related issues with the `Closes #n` convention.
