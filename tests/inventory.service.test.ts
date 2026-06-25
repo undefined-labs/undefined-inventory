@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ItemRegistryContract } from '../src/shared/contracts/item-registry.contract'
 import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
@@ -162,5 +162,119 @@ describe('InventoryService mutations', () => {
     lock.release(id)
     await service.addItem(id, 'water', 1)
     expect(inv.countItem('water')).toBe(1)
+  })
+})
+
+describe('InventoryService.moveItem (cross-inventory)', () => {
+  it('moves a stack across two inventories, emits a changed for each side, persists both in one saveMany', async () => {
+    const { service, store } = makeService()
+    const saveMany = vi.spyOn(store, 'saveMany')
+    const a = stashInventoryId('a')
+    const b = stashInventoryId('b')
+
+    const events: InventoryChangedEvent[] = []
+    const handler = (e?: unknown) => events.push(e as InventoryChangedEvent)
+
+    const from = await service.open('stash', a)
+    const to = await service.open('stash', b)
+    await service.addItem(a, 'water', 3) // slot 1 of A
+
+    InventoryEvents.on('changed', handler)
+    await service.moveItem(a, b, 1, 1, 3)
+    InventoryEvents.off('changed', handler)
+
+    // Domain effect: stack relocated A→B.
+    expect(from.getSlot(1)).toBeNull()
+    expect(to.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
+
+    // One event per side.
+    expect(events.map((e) => e.inventoryId).sort()).toEqual([a, b])
+
+    // Both sides land in a single transaction — a crash can't split the move.
+    expect(saveMany).toHaveBeenCalledTimes(1)
+    expect(saveMany.mock.calls[0]![0].map((s) => s.id).sort()).toEqual([a, b])
+    expect((await store.load(a))!.items).toEqual([])
+    expect((await store.load(b))!.items).toEqual([{ slot: 1, name: 'water', count: 3 }])
+  })
+
+  it('serializes overlapping concurrent moves — the second cannot interleave mid-flight', async () => {
+    // A store whose saveMany blocks until released, so we can hold one move "in flight"
+    // (lock held across the await) and fire a second overlapping move against it.
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let firstSaveStarted!: () => void
+    const firstStarted = new Promise<void>((resolve) => (firstSaveStarted = resolve))
+
+    const store = new InMemoryInventoryStore()
+    let calls = 0
+    const real = store.saveMany.bind(store)
+    store.saveMany = async (invs) => {
+      if (calls++ === 0) {
+        firstSaveStarted()
+        await gate // first move parks here holding both locks
+      }
+      return real(invs)
+    }
+
+    const { service } = makeService({ store })
+    const a = stashInventoryId('a')
+    const b = stashInventoryId('b')
+    const from = await service.open('stash', a)
+    await service.open('stash', b)
+    await service.addItem(a, 'water', 4)
+
+    const first = service.moveItem(a, b, 1, 1, 2) // parks in saveMany holding a + b
+    await firstStarted
+
+    // A second move touching an overlapping id must NOT proceed while the first holds locks.
+    await expect(service.moveItem(b, a, 1, 1, 1)).rejects.toThrow()
+
+    release()
+    await first
+    // Only the first move's effect is visible; the rejected one mutated nothing.
+    expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 2 }) // 4 - 2 split
+  })
+
+  it('does not deadlock on opposite-direction moves (sorted lock order)', async () => {
+    const { service } = makeService()
+    const a = stashInventoryId('a')
+    const b = stashInventoryId('b')
+    await service.open('stash', a)
+    await service.open('stash', b)
+    await service.addItem(a, 'water', 1)
+    await service.addItem(b, 'phone', 1)
+
+    // A→B then B→A: shared ids acquired in the same sorted order each time → no hold-and-wait
+    // cycle. Both complete (sequentially); the suite would hang on a deadlock.
+    await service.moveItem(a, b, 1, 2, 1)
+    await service.moveItem(b, a, 2, 1, 1)
+
+    // Round-trip leaves the water back where it started.
+    const from = await service.open('stash', a)
+    expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 1 })
+  })
+
+  it('rejects a cross-inv move over the target weight without mutating or persisting either side', async () => {
+    // Source roomy, target tight: 3 water = 300g but the target only holds < 300g.
+    const tightTarget = new (class extends CapacityPolicyContract {
+      resolve(_type: string, id: string) {
+        return id.endsWith('b') ? { slots: 10, maxWeight: 200 } : { slots: 10, maxWeight: 5000 }
+      }
+    })()
+
+    const { service, store } = makeService({ capacity: tightTarget })
+    const saveMany = vi.spyOn(store, 'saveMany')
+    const a = stashInventoryId('a')
+    const b = stashInventoryId('b')
+    const from = await service.open('stash', a)
+    const to = await service.open('stash', b)
+    await service.addItem(a, 'water', 3) // 300g
+
+    await expect(service.moveItem(a, b, 1, 1, 3)).rejects.toThrow()
+
+    // Neither side mutated, nothing persisted — atomic rejection.
+    expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
+    expect(to.getItems()).toEqual([])
+    expect(saveMany).not.toHaveBeenCalled()
   })
 })
