@@ -9,6 +9,7 @@ import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
+import { ProximityGivePolicy } from '../src/server/policies/proximity-give.policy'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryService } from '../src/server/services/inventory.service'
 import { TouchTracker } from '../src/server/subscribers/touch-tracker'
@@ -75,6 +76,7 @@ function makeHarness(
     access,
     sync,
     new TouchTracker(InventoryEvents),
+    new ProximityGivePolicy(new InMemoryInventoryLock()),
   )
   const subscriber = new InventorySyncSubscriber(InventoryEvents, viewers, sync)
   return { service, viewers, sync, subscriber, dispose: () => subscriber.dispose() }

@@ -6,8 +6,11 @@ import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.c
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
+import { GiveAccessContract } from '../../shared/contracts/give-access.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryError } from '../../shared/errors'
+import { dropInventoryId } from '../../shared/utils/inventory-id'
+import { randomUUID } from 'node:crypto'
 import {
   ChangeReason,
   InventoryChangedEvent,
@@ -36,6 +39,7 @@ export class InventoryService {
     @inject(AccessPolicyContract as never) private readonly access: AccessPolicyContract,
     @inject(InventorySyncContract as never) private readonly sync: InventorySyncContract,
     @inject(TouchTracker) private readonly touch: TouchTracker,
+    @inject(GiveAccessContract as never) private readonly giveAccess: GiveAccessContract,
   ) {}
 
   /**
@@ -135,8 +139,11 @@ export class InventoryService {
       if (to !== from) this.emitChanged(to, [toChanged], 'move')
 
       // Persist both sides atomically. Same-inv → one snapshot (dedupe via the live set).
-      const snapshots = [...new Set([from, to])].map((inv) => inv.serialize())
-      await this.store.saveMany(snapshots)
+      // Ephemeral sides (a drop) are skipped — they never touch the store, even mid-move.
+      const snapshots = [...new Set([from, to])]
+        .filter((inv) => !inv.ephemeral)
+        .map((inv) => inv.serialize())
+      if (snapshots.length > 0) await this.store.saveMany(snapshots)
     } catch (error) {
       // A rejected move emits no `changed`, so the actor's optimistic prediction is never
       // corrected by the broadcast path. Re-assert the slots it named, per-inventory, to the
@@ -150,6 +157,56 @@ export class InventoryService {
     } finally {
       for (const id of acquired.reverse()) this.locks.release(id)
     }
+  }
+
+  /**
+   * Drop `count` units from `fromSlot` onto the ground: mint an ephemeral `drop:` inventory,
+   * move the stack into it, and return its id. The drop is never persisted (ephemeral) but is
+   * fully evictable — its eventual eviction emits the drop-scoped `evicted` signal a drop
+   * resource uses to despawn the world prop. World placement is the resource's job, not ours.
+   */
+  async drop(fromId: string, fromSlot: number, count: number, actor?: number): Promise<string> {
+    const id = dropInventoryId(randomUUID())
+    const capacity = this.capacity.resolve('drop', id)
+    const drop = this.registry.createEphemeral('drop', id, capacity)
+    this.registry.set(drop)
+    this.touch.touch(id)
+    // Land in the drop's first slot — a freshly-minted drop is empty, so slot 1 is free.
+    await this.moveItem(fromId, id, fromSlot, 1, count, actor)
+    return id
+  }
+
+  /**
+   * Give `count` units from `fromSlot` to a nearby player's inventory. The destination slot
+   * is resolved server-side (the target's first free slot) — never trusted from the actor,
+   * who can't see into an inventory they may not open. Gated by `canReceive` (proximity +
+   * target-not-busy); a rejected give re-asserts the source slot to the actor so their
+   * optimistic prediction snaps back. Can-carry is enforced by the domain move, not here.
+   */
+  async give(
+    fromId: string,
+    fromSlot: number,
+    count: number,
+    targetId: string,
+    actor: number,
+    ctx?: InventoryContext,
+  ): Promise<void> {
+    const target = this.requireOpen(targetId)
+
+    // A give rejected before the move emits no `changed`, so — like a rejected move — the
+    // actor's optimistic prediction is never corrected. Snap the source slot back to them.
+    const rejectGive = (message: string): never => {
+      this.reassert(actor, [{ id: fromId, slot: fromSlot }])
+      throw new InventoryError(message)
+    }
+
+    if (!this.giveAccess.canReceive(targetId, actor, ctx))
+      return rejectGive(`player '${actor}' may not give to '${targetId}'`)
+
+    const toSlot = target.firstFreeSlot()
+    if (toSlot === null) return rejectGive(`target inventory '${targetId}' is full`)
+
+    await this.moveItem(fromId, targetId, fromSlot, toSlot, count, actor)
   }
 
   /**

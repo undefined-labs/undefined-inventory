@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ItemRegistryContract } from '../src/shared/contracts/item-registry.contract'
 import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
 import { AccessPolicyContract } from '../src/shared/contracts/access-policy.contract'
+import { GiveAccessContract } from '../src/shared/contracts/give-access.contract'
 import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
@@ -45,6 +46,12 @@ class NoopSync extends InventorySyncContract {
   updateSlots(): void {}
 }
 
+class AllowGive extends GiveAccessContract {
+  canReceive(): boolean {
+    return true
+  }
+}
+
 function makeService(overrides?: {
   store?: InMemoryInventoryStore
   capacity?: CapacityPolicyContract
@@ -67,6 +74,7 @@ function makeService(overrides?: {
     new AllowAccess(),
     new NoopSync(),
     new TouchTracker(InventoryEvents),
+    new AllowGive(),
   )
   return { service, store, registry }
 }
@@ -172,6 +180,7 @@ describe('InventoryService mutations', () => {
       new AllowAccess(),
       new NoopSync(),
       new TouchTracker(InventoryEvents),
+      new AllowGive(),
     )
     const id = stashInventoryId('locker-1')
     const inv = await service.open('stash', id)

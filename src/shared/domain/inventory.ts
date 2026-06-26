@@ -17,13 +17,27 @@ export class Inventory {
   readonly type: string
   readonly slots: number
   readonly maxWeight: number
+  /**
+   * Memory-only inventory that is never written to the store (a ground drop). Still fully
+   * evictable — when an ephemeral inventory is swept, the `evicted` signal lets a drop
+   * resource despawn its world prop. Lives on the aggregate (not inferred from `type`) so the
+   * persistence-skip is an explicit property the domain owns.
+   */
+  readonly ephemeral: boolean
   private items = new Map<number, Slot>()
 
-  constructor(id: string, type: string, capacity: Capacity, items: SerializedSlot[] = []) {
+  constructor(
+    id: string,
+    type: string,
+    capacity: Capacity,
+    items: SerializedSlot[] = [],
+    options?: { ephemeral?: boolean },
+  ) {
     this.id = id
     this.type = type
     this.slots = capacity.slots
     this.maxWeight = capacity.maxWeight
+    this.ephemeral = options?.ephemeral ?? false
     for (const slot of items) {
       this.items.set(slot.slot, {
         slot: slot.slot,
@@ -154,6 +168,11 @@ export class Inventory {
 
   getItems(): Slot[] {
     return [...this.items.values()]
+  }
+
+  /** The lowest empty slot index, or `null` if full. Used to target a give server-side. */
+  firstFreeSlot(): number | null {
+    return this.firstEmptySlot(new Set())
   }
 
   /** Thin persisted shape: `{ id, type, items }`, empty metadata omitted, no capacity. */
