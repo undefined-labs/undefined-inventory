@@ -33,6 +33,11 @@ export class InventoryRegistry {
     return new Inventory(id, type, capacity)
   }
 
+  /** Create a born-fresh ephemeral inventory (a ground drop) — never persisted, still evictable. */
+  createEphemeral(type: string, id: string, capacity: Capacity): Inventory {
+    return new Inventory(id, type, capacity, [], { ephemeral: true })
+  }
+
   /** Rehydrate a stored inventory. */
   from(serialized: SerializedInventory, capacity: Capacity): Inventory {
     return Inventory.from(serialized, capacity)

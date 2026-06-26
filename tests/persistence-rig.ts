@@ -7,6 +7,7 @@ import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { DistanceAccessPolicy } from '../src/server/policies/distance-access.policy'
 import { NoopInventorySync } from '../src/server/transport/noop-sync'
+import { ProximityGivePolicy } from '../src/server/policies/proximity-give.policy'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { DirtySet } from '../src/server/subscribers/dirty-set'
 import { SaveScheduler } from '../src/server/subscribers/save-scheduler'
@@ -57,6 +58,7 @@ export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
     new DistanceAccessPolicy(),
     new NoopInventorySync(),
     touch,
+    new ProximityGivePolicy(locks),
   )
   const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, touch, {
     idleMs: options?.idleMs,

@@ -134,11 +134,14 @@ export class SaveScheduler {
     this.stop()
   }
 
-  /** Serialize the live aggregates for the given ids, skipping any since evicted. */
+  /**
+   * Serialize the live aggregates for the given ids, skipping any since evicted, and any
+   * ephemeral inventory (a drop) — those are memory-only and must never reach the store.
+   */
   private snapshotsFor(ids: string[]) {
     return ids
       .map((id) => this.registry.get(id))
-      .filter((inv): inv is NonNullable<typeof inv> => inv !== null)
+      .filter((inv): inv is NonNullable<typeof inv> => inv !== null && !inv.ephemeral)
       .map((inv) => inv.serialize())
   }
 }

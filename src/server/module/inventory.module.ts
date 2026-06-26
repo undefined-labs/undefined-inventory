@@ -5,12 +5,14 @@ import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.c
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
+import { GiveAccessContract } from '../../shared/contracts/give-access.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { configureInventoryEvents, InventoryEvents } from '../events/inventory-events'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
 import { DistanceAccessPolicy } from '../policies/distance-access.policy'
 import { InMemoryInventoryLock } from '../policies/in-memory-lock'
 import { NoopInventorySync } from '../transport/noop-sync'
+import { ProximityGivePolicy } from '../policies/proximity-give.policy'
 import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-capacity.policy'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
@@ -67,6 +69,10 @@ export class InventoryModule {
     this.bind(InventorySyncContract, provider)
   }
 
+  static setGiveAccess(provider: Provider<GiveAccessContract>): void {
+    this.bind(GiveAccessContract, provider)
+  }
+
   static install(options?: InventoryModuleInstallOptions): void {
     if (this.installed) return
     const container = this.container()
@@ -94,6 +100,12 @@ export class InventoryModule {
       container.register(AccessPolicyContract as never, { useValue: new DistanceAccessPolicy() })
     if (!container.isRegistered(InventorySyncContract as never))
       container.register(InventorySyncContract as never, { useValue: new NoopInventorySync() })
+    if (!container.isRegistered(GiveAccessContract as never))
+      container.register(GiveAccessContract as never, {
+        useValue: new ProximityGivePolicy(
+          container.resolve(InventoryLockContract as never) as InventoryLockContract,
+        ),
+      })
 
     // Internal wiring — always installed.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
