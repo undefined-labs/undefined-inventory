@@ -9,4 +9,10 @@ export abstract class InventoryStoreContract {
   abstract load(id: string): Promise<SerializedInventory | null>
   /** One transaction: all given inventories land, or none do. */
   abstract saveMany(invs: SerializedInventory[]): Promise<void>
+  /**
+   * Cascade-delete a row by id, used by orphan-GC when a container's parent item is destroyed —
+   * otherwise the destroyed bag's contents linger as a junk row a re-minted uid could never
+   * reach. Deleting an absent id is a no-op (idempotent).
+   */
+  abstract delete(id: string): Promise<void>
 }

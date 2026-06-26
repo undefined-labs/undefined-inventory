@@ -24,6 +24,13 @@ export class Inventory {
    * persistence-skip is an explicit property the domain owns.
    */
   readonly ephemeral: boolean
+  /**
+   * Resolves extra weight contributed by a slot beyond its own stack — the rolled-up weight
+   * of a container item's contents (depth 1). Injected by the service (which alone can reach
+   * the live container instance), so the aggregate stays pure: it calls a supplied function,
+   * never a registry. Defaults to zero contribution (a plain inventory).
+   */
+  private readonly extraWeightOf: (slot: Slot) => number
   private items = new Map<number, Slot>()
 
   constructor(
@@ -31,13 +38,14 @@ export class Inventory {
     type: string,
     capacity: Capacity,
     items: SerializedSlot[] = [],
-    options?: { ephemeral?: boolean },
+    options?: { ephemeral?: boolean; extraWeightOf?: (slot: Slot) => number },
   ) {
     this.id = id
     this.type = type
     this.slots = capacity.slots
     this.maxWeight = capacity.maxWeight
     this.ephemeral = options?.ephemeral ?? false
+    this.extraWeightOf = options?.extraWeightOf ?? (() => 0)
     for (const slot of items) {
       this.items.set(slot.slot, {
         slot: slot.slot,
@@ -52,7 +60,7 @@ export class Inventory {
 
   get weight(): number {
     let total = 0
-    for (const slot of this.items.values()) total += slot.weight
+    for (const slot of this.items.values()) total += slot.weight + this.extraWeightOf(slot)
     return total
   }
 

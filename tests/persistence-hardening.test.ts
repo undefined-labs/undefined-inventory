@@ -62,6 +62,10 @@ class ControllableStore extends InventoryStoreContract {
       this.inFlight--
     }
   }
+
+  async delete(id: string): Promise<void> {
+    this.snapshots.delete(id)
+  }
 }
 
 describe('persistence hardening', () => {

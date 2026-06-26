@@ -18,6 +18,13 @@ export interface ItemDefinition {
    * registry, NEVER persisted → changing it costs zero DB migration.
    */
   maxStack?: number
+  /**
+   * Marks this item as a container holder (a bag/wallet/mail-package). Its contents live in
+   * an own inventory row keyed `container:<metadata.uid>`, not nested in the item's metadata;
+   * the item carries only the reference. `size` sets the container's capacity. A container
+   * item is non-stackable by construction — each instance owns a distinct row.
+   */
+  container?: { size: number }
 }
 
 /** A live stack occupying one slot. */

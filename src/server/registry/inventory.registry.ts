@@ -1,5 +1,11 @@
 import { Inventory } from '../../shared/domain/inventory'
-import { Capacity, SerializedInventory } from '../../shared/types/item.types'
+import { Capacity, SerializedInventory, Slot } from '../../shared/types/item.types'
+
+/** Per-instance hydrate options threaded from the service (e.g. container weight rollup). */
+export interface HydrateOptions {
+  ephemeral?: boolean
+  extraWeightOf?: (slot: Slot) => number
+}
 
 /**
  * Identity map (`id → one live instance`) plus the inventory factory. One instance per id
@@ -29,8 +35,8 @@ export class InventoryRegistry {
   }
 
   /** Create a born-fresh empty inventory. */
-  create(type: string, id: string, capacity: Capacity): Inventory {
-    return new Inventory(id, type, capacity)
+  create(type: string, id: string, capacity: Capacity, options?: HydrateOptions): Inventory {
+    return new Inventory(id, type, capacity, [], options)
   }
 
   /** Create a born-fresh ephemeral inventory (a ground drop) — never persisted, still evictable. */
@@ -39,7 +45,7 @@ export class InventoryRegistry {
   }
 
   /** Rehydrate a stored inventory. */
-  from(serialized: SerializedInventory, capacity: Capacity): Inventory {
-    return Inventory.from(serialized, capacity)
+  from(serialized: SerializedInventory, capacity: Capacity, options?: HydrateOptions): Inventory {
+    return new Inventory(serialized.id, serialized.type, capacity, serialized.items, options)
   }
 }

@@ -44,6 +44,10 @@ class FailableStore extends InventoryStoreContract {
     }
     for (const inv of invs) this.snapshots.set(inv.id, structuredClone(inv))
   }
+
+  async delete(id: string): Promise<void> {
+    this.snapshots.delete(id)
+  }
 }
 
 const IDLE_MS = 1000

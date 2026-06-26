@@ -19,6 +19,10 @@ export class InMemoryInventoryStore extends InventoryStoreContract {
     for (const inv of invs) this.snapshots.set(inv.id, JSON.stringify(inv))
   }
 
+  async delete(id: string): Promise<void> {
+    this.snapshots.delete(id)
+  }
+
   private assertValid(inv: SerializedInventory): void {
     if (!inv.id) throw new Error('invalid inventory: missing id')
     for (const item of inv.items) {
