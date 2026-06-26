@@ -1,10 +1,6 @@
 import { Meta } from '../types/item.types'
 
-/**
- * A mutation about to happen, handed to a veto hook *before* it commits. Discriminated by
- * `kind`. A move carries both ends (`from`/`to`); add/remove carry the single inventory they
- * target. `type` is the inventory type (e.g. `player`, `container`) for type-scoped filtering.
- */
+/** A mutation handed to a veto hook *before* it commits, discriminated by `kind`. */
 export type MutationEvent =
   | { kind: 'add'; inventoryId: string; type: string; item: string; count: number; metadata?: Meta }
   | { kind: 'remove'; inventoryId: string; type: string; item: string; count: number; metadata?: Meta }
@@ -41,13 +37,9 @@ export interface Hook {
 
 /**
  * Pre-commit veto bus. External resources register hooks to gate mutations by policy (safe
- * zones, RP gates) without touching core. The contract is fail-open by design: this is a
- * policy seam, not a security invariant — core invariants live in the domain and locks.
- *
- * - Only an explicit `false` vetoes; non-boolean returns pass.
- * - Hooks are ANDed with short-circuit: the first `false` aborts and stops evaluation.
- * - A throwing hook fails open (the mutation proceeds) and is logged loudly.
- * - A move fires if either side matches a hook's filter; a veto aborts the whole move.
+ * zones, RP gates) without touching core. Fail-open by design: this is a policy seam, not a
+ * security invariant — core invariants live in the domain and locks, so a buggy hook must
+ * never brick a mutation.
  */
 export abstract class HookContract {
   /** Register a veto hook. */

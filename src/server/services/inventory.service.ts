@@ -219,6 +219,7 @@ export class InventoryService {
 
       // Pre-commit veto inside the critical section. The event carries both ends, so a hook
       // filtered to either side fires; a veto aborts the whole move before anything mutates.
+      // An empty source has no item to gate, so the bus is skipped — `moveItem` rejects it anyway.
       const moving = from.getSlot(fromSlot)
       if (
         moving &&

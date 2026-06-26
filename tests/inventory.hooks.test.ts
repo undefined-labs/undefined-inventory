@@ -139,4 +139,21 @@ describe('hooks: canMutate veto bus', () => {
     expect((await service.open('player', src)).getSlot(1)?.count).toBe(2)
     expect((await service.open('stash', dst)).getSlot(1)).toBeNull()
   })
+
+  it('a move veto keyed to the source side also aborts the whole move', async () => {
+    const { service, hooks } = makeService()
+    const src = playerInventoryId('eve')
+    const dst = stashInventoryId('vault')
+    await service.open('player', src)
+    await service.open('stash', dst)
+    await service.addItem(src, 'water', 2)
+
+    // The symmetric half of "either side": filtering on the source must fire the veto too.
+    hooks.register({ filter: { inventoryId: src }, canMutate: () => false })
+
+    await expect(service.moveItem(src, dst, 1, 1, 2)).rejects.toThrow()
+
+    expect((await service.open('player', src)).getSlot(1)?.count).toBe(2)
+    expect((await service.open('stash', dst)).getSlot(1)).toBeNull()
+  })
 })
