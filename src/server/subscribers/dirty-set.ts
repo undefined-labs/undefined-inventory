@@ -31,6 +31,11 @@ export class DirtySet {
     for (const id of ids) this.ids.add(id)
   }
 
+  /** Whether `id` currently has unsaved changes (used by the eviction predicate). */
+  has(id: string): boolean {
+    return this.ids.has(id)
+  }
+
   get size(): number {
     return this.ids.size
   }

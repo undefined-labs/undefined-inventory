@@ -18,6 +18,16 @@ export class InventoryRegistry {
     this.live.set(inv.id, inv)
   }
 
+  /** Every currently-held id. */
+  ids(): string[] {
+    return [...this.live.keys()]
+  }
+
+  /** Drop `id` from memory (post-flush eviction). */
+  evict(id: string): void {
+    this.live.delete(id)
+  }
+
   /** Create a born-fresh empty inventory. */
   create(type: string, id: string, capacity: Capacity): Inventory {
     return new Inventory(id, type, capacity)

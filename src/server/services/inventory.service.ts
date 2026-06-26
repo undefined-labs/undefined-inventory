@@ -16,6 +16,7 @@ import {
 import { InventoryContext, ItemDefinition, Meta } from '../../shared/types/item.types'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
+import { TouchTracker } from '../subscribers/touch-tracker'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
 
 /**
@@ -34,6 +35,7 @@ export class InventoryService {
     @inject(ViewerRegistry) private readonly viewers: ViewerRegistry,
     @inject(AccessPolicyContract as never) private readonly access: AccessPolicyContract,
     @inject(InventorySyncContract as never) private readonly sync: InventorySyncContract,
+    @inject(TouchTracker) private readonly touch: TouchTracker,
   ) {}
 
   /**
@@ -78,6 +80,9 @@ export class InventoryService {
       ? this.registry.from(serialized, capacity)
       : this.registry.create(type, id, capacity)
     this.registry.set(inv)
+    // Seed the idle clock so a just-opened, never-mutated inventory isn't instantly
+    // eviction-eligible before it has ever been touched.
+    this.touch.touch(id)
     return inv
   }
 

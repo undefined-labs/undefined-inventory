@@ -10,6 +10,7 @@ import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryChangedEvent } from '../src/shared/events/inventory-event.types'
+import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
 import { InMemoryInventoryStore } from './in-memory.store'
 
@@ -65,6 +66,7 @@ function makeService(overrides?: {
     new ViewerRegistry(),
     new AllowAccess(),
     new NoopSync(),
+    new TouchTracker(InventoryEvents),
   )
   return { service, store, registry }
 }
@@ -169,6 +171,7 @@ describe('InventoryService mutations', () => {
       new ViewerRegistry(),
       new AllowAccess(),
       new NoopSync(),
+      new TouchTracker(InventoryEvents),
     )
     const id = stashInventoryId('locker-1')
     const inv = await service.open('stash', id)

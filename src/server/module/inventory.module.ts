@@ -18,6 +18,7 @@ import { InventoryService } from '../services/inventory.service'
 import { DirtySet } from '../subscribers/dirty-set'
 import { InventorySyncSubscriber } from '../subscribers/inventory-sync.subscriber'
 import { SaveScheduler } from '../subscribers/save-scheduler'
+import { TouchTracker } from '../subscribers/touch-tracker'
 
 type Constructor<T> = new (...args: any[]) => T
 type Provider<T> = T | Constructor<T>
@@ -27,6 +28,8 @@ export interface InventoryModuleInstallOptions {
   types?: TypeCapacityMap
   /** Write-behind flush interval (ms). Default 300_000. */
   saveIntervalMs?: number
+  /** Idle threshold (ms) before an unwatched, unlocked inventory is eviction-eligible. */
+  idleMs?: number
   /** Mirror `inventory:changed` to a cross-resource event. Default OFF. */
   bridgeExternalEvents?: boolean
   /** Skip wiring the default sync subscriber, to ship a UI that drives the protocol itself. */
@@ -96,6 +99,9 @@ export class InventoryModule {
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
     container.registerSingleton(InventoryRegistry, InventoryRegistry)
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
+    // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
+    // with the event bus rather than auto-resolved.
+    container.register(TouchTracker, { useValue: new TouchTracker(InventoryEvents) })
     container.registerSingleton(InventoryService, InventoryService)
 
     // Sync subscriber — wired by default; `disableDefaultUi` opts a custom-UI server out of
@@ -115,7 +121,10 @@ export class InventoryModule {
       container.resolve(InventoryStoreContract as never) as InventoryStoreContract,
       container.resolve(InventoryRegistry),
       dirty,
-      { saveIntervalMs: options?.saveIntervalMs },
+      container.resolve(ViewerRegistry),
+      container.resolve(InventoryLockContract as never) as InventoryLockContract,
+      container.resolve(TouchTracker),
+      { saveIntervalMs: options?.saveIntervalMs, idleMs: options?.idleMs },
     )
     container.register(SaveScheduler, { useValue: scheduler })
     scheduler.start()
@@ -139,6 +148,7 @@ export class InventoryModule {
     const scheduler = container.resolve(SaveScheduler)
     await scheduler.flushAll()
     container.resolve(DirtySet).dispose()
+    container.resolve(TouchTracker).dispose()
     if (container.isRegistered(InventorySyncSubscriber))
       container.resolve(InventorySyncSubscriber).dispose()
     this.reset()
@@ -150,6 +160,7 @@ export class InventoryModule {
       const container = this.container()
       if (container.isRegistered(SaveScheduler)) container.resolve(SaveScheduler).dispose()
       if (container.isRegistered(DirtySet)) container.resolve(DirtySet).dispose()
+      if (container.isRegistered(TouchTracker)) container.resolve(TouchTracker).dispose()
       if (container.isRegistered(InventorySyncSubscriber))
         container.resolve(InventorySyncSubscriber).dispose()
     }

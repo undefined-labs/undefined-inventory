@@ -1,10 +1,16 @@
+import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventoryRegistry } from '../registry/inventory.registry'
+import { ViewerRegistry } from '../registry/viewer.registry'
+import { emitInventoryEvicted } from '../events/inventory-events'
 import { DirtySet } from './dirty-set'
+import { TouchTracker } from './touch-tracker'
 
 export interface SaveSchedulerOptions {
   /** Flush interval in ms. Default 300_000 (5 min) — crash loss window is one interval. */
   saveIntervalMs?: number
+  /** Idle threshold in ms before an unwatched, unlocked inventory is eviction-eligible. */
+  idleMs?: number
 }
 
 /**
@@ -13,6 +19,7 @@ export interface SaveSchedulerOptions {
  */
 export class SaveScheduler {
   private readonly intervalMs: number
+  private readonly idleMs: number
   private timer: ReturnType<typeof setInterval> | null = null
   /** The save currently in flight, or null. Held so shutdown can await it. */
   private inFlight: Promise<void> | null = null
@@ -21,15 +28,61 @@ export class SaveScheduler {
     private readonly store: InventoryStoreContract,
     private readonly registry: InventoryRegistry,
     private readonly dirty: DirtySet,
+    private readonly viewers: ViewerRegistry,
+    private readonly locks: InventoryLockContract,
+    private readonly touch: TouchTracker,
     options?: SaveSchedulerOptions,
   ) {
     this.intervalMs = options?.saveIntervalMs ?? 300_000
+    this.idleMs = options?.idleMs ?? 600_000
   }
 
-  /** Begin the periodic flush loop. Idempotent. */
+  /** Begin the periodic flush+sweep loop. Idempotent. */
   start(): void {
     if (this.timer) return
-    this.timer = setInterval(() => void this.flush(), this.intervalMs)
+    this.timer = setInterval(() => void this.sweep(Date.now()), this.intervalMs)
+  }
+
+  /**
+   * One save-pass: flush dirty state, then evict every inventory that is idle ∧ unwatched ∧
+   * unlocked. Flush-before-evict is non-negotiable — an inventory must be on disk before it
+   * leaves memory, or its unsaved tail is lost. The three guards prevent dropping a live
+   * instance out from under a viewer or lock-holder (a dupe/desync).
+   */
+  async sweep(now: number): Promise<void> {
+    await this.flush()
+    // If a save is still running (this pass's flush was a no-op, or another tick's save is
+    // mid-flight), some resident state may be unsaved — skip eviction entirely this pass
+    // rather than risk dropping an unflushed inventory. The next pass evicts once clean.
+    if (this.inFlight) return
+    for (const id of this.registry.ids()) {
+      if (this.evictable(id, now)) this.evict(id)
+    }
+  }
+
+  /**
+   * Drop an evictable inventory from memory and announce it. The `evicted` event lets a drop
+   * resource despawn the world prop — without it the prop outlives the data (a ghost pickup).
+   */
+  private evict(id: string): void {
+    const inv = this.registry.get(id)
+    this.registry.evict(id)
+    this.touch.forget(id)
+    if (inv) emitInventoryEvicted({ inventoryId: inv.id, type: inv.type })
+  }
+
+  /**
+   * Evict iff idle ∧ zero-viewers ∧ no-locks-held ∧ clean. The dirty guard is
+   * defence-in-depth: flush runs strictly before this, but a failed-and-requeued save can
+   * leave an idle inventory still dirty — never drop unsaved state regardless of how it got
+   * there.
+   */
+  private evictable(id: string, now: number): boolean {
+    if (this.viewers.get(id).size > 0) return false
+    if (this.locks.isLocked(id)) return false
+    if (this.dirty.has(id)) return false
+    const touchedAt = this.touch.lastTouchedAt(id)
+    return touchedAt !== undefined && now - touchedAt >= this.idleMs
   }
 
   /** Persist all currently-dirty inventories in one transaction. */
