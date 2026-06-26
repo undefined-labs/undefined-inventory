@@ -5,6 +5,7 @@ import { ItemDefinition } from '../src/shared/types/item.types'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
+import { HookBus } from '../src/server/policies/hook-bus'
 import { DistanceAccessPolicy } from '../src/server/policies/distance-access.policy'
 import { NoopInventorySync } from '../src/server/transport/noop-sync'
 import { ProximityGivePolicy } from '../src/server/policies/proximity-give.policy'
@@ -59,6 +60,7 @@ export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
     new NoopInventorySync(),
     touch,
     new ProximityGivePolicy(locks),
+    new HookBus(),
   )
   const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, touch, {
     idleMs: options?.idleMs,

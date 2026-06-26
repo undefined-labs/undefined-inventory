@@ -6,10 +6,12 @@ import { InventoryLockContract } from '../../shared/contracts/inventory-lock.con
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
 import { GiveAccessContract } from '../../shared/contracts/give-access.contract'
+import { HookContract } from '../../shared/contracts/hook.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { configureInventoryEvents, InventoryEvents } from '../events/inventory-events'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
 import { DistanceAccessPolicy } from '../policies/distance-access.policy'
+import { HookBus } from '../policies/hook-bus'
 import { InMemoryInventoryLock } from '../policies/in-memory-lock'
 import { NoopInventorySync } from '../transport/noop-sync'
 import { ProximityGivePolicy } from '../policies/proximity-give.policy'
@@ -73,6 +75,10 @@ export class InventoryModule {
     this.bind(GiveAccessContract, provider)
   }
 
+  static setHooks(provider: Provider<HookContract>): void {
+    this.bind(HookContract, provider)
+  }
+
   static install(options?: InventoryModuleInstallOptions): void {
     if (this.installed) return
     const container = this.container()
@@ -106,6 +112,9 @@ export class InventoryModule {
           container.resolve(InventoryLockContract as never) as InventoryLockContract,
         ),
       })
+    // Veto bus — empty by default (no-op: nothing vetoes). Integrators register hooks onto it.
+    if (!container.isRegistered(HookContract as never))
+      container.register(HookContract as never, { useValue: new HookBus() })
 
     // Internal wiring — always installed.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })

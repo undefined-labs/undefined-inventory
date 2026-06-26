@@ -4,6 +4,7 @@ import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.c
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
+import { HookContract } from '../../shared/contracts/hook.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryModule, InventoryModuleInstallOptions } from '../module/inventory.module'
 
@@ -19,6 +20,8 @@ export interface InventoryServerPluginOptions extends InventoryModuleInstallOpti
   accessPolicy?: Provider<AccessPolicyContract>
   /** Server→client transport. Default: no-op (swap in a FiveM net adapter for live UI). */
   sync?: Provider<InventorySyncContract>
+  /** Pre-commit veto bus. Default: empty (nothing vetoes). */
+  hooks?: Provider<HookContract>
 }
 
 /**
@@ -43,6 +46,7 @@ export function inventoryServerPlugin(
       if (options.lock) InventoryModule.setLock(options.lock)
       if (options.accessPolicy) InventoryModule.setAccessPolicy(options.accessPolicy)
       if (options.sync) InventoryModule.setSync(options.sync)
+      if (options.hooks) InventoryModule.setHooks(options.hooks)
 
       InventoryModule.install({
         types: options.types,

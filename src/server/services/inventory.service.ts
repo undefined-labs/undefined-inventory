@@ -7,6 +7,7 @@ import { InventoryLockContract } from '../../shared/contracts/inventory-lock.con
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
 import { GiveAccessContract } from '../../shared/contracts/give-access.contract'
+import { HookContract } from '../../shared/contracts/hook.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryError } from '../../shared/errors'
 import { dropInventoryId, containerInventoryId, parseInventoryId } from '../../shared/utils/inventory-id'
@@ -40,6 +41,7 @@ export class InventoryService {
     @inject(InventorySyncContract as never) private readonly sync: InventorySyncContract,
     @inject(TouchTracker) private readonly touch: TouchTracker,
     @inject(GiveAccessContract as never) private readonly giveAccess: GiveAccessContract,
+    @inject(HookContract as never) private readonly hooks: HookContract,
   ) {}
 
   /**
@@ -114,7 +116,12 @@ export class InventoryService {
     // A container item gets a freshly-minted uid so its contents row is keyed to THIS instance
     // alone — a brand-new bag can never alias a destroyed one's lingering row (the dupe guard).
     const meta = def.container ? { ...metadata, uid: metadata?.uid ?? randomUUID() } : metadata
-    await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta))
+    await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta), {
+      kind: 'add',
+      item: itemName,
+      count,
+      metadata: meta,
+    })
   }
 
   /**
@@ -146,7 +153,12 @@ export class InventoryService {
   /** Remove `count` of an item from an open inventory. Emits `inventory:changed`. */
   async removeItem(id: string, itemName: string, count: number, metadata?: Meta): Promise<void> {
     const def = this.requireItem(itemName)
-    await this.mutate(id, 'remove', (inv) => inv.removeItem(def, count, metadata))
+    await this.mutate(id, 'remove', (inv) => inv.removeItem(def, count, metadata), {
+      kind: 'remove',
+      item: itemName,
+      count,
+      metadata,
+    })
   }
 
   /**
@@ -204,6 +216,22 @@ export class InventoryService {
 
       const from = this.requireOpen(fromId)
       const to = this.requireOpen(toId)
+
+      // Pre-commit veto inside the critical section. The event carries both ends, so a hook
+      // filtered to either side fires; a veto aborts the whole move before anything mutates.
+      const moving = from.getSlot(fromSlot)
+      if (
+        moving &&
+        !this.hooks.canMutate({
+          kind: 'move',
+          from: { inventoryId: fromId, type: from.type },
+          to: { inventoryId: toId, type: to.type },
+          item: moving.name,
+          count,
+        })
+      )
+        throw new InventoryError(`move from '${fromId}' to '${toId}' was vetoed`)
+
       const { fromChanged, toChanged } = moveItem(
         from,
         to,
@@ -296,10 +324,15 @@ export class InventoryService {
     id: string,
     reason: ChangeReason,
     op: (inv: Inventory) => number[],
+    event: { kind: 'add' | 'remove'; item: string; count: number; metadata?: Meta },
   ): Promise<void> {
     if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
     try {
       const inv = this.requireOpen(id)
+      // Pre-commit veto, inside the critical section: an external policy hook can abort the
+      // mutation before anything changes. Fail-open semantics live in the bus, not here.
+      if (!this.hooks.canMutate({ ...event, inventoryId: id, type: inv.type }))
+        throw new InventoryError(`mutation '${event.kind}' on '${id}' was vetoed`)
       const changed = op(inv)
       this.emitChanged(inv, changed, reason)
     } finally {
