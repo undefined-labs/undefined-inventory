@@ -1,12 +1,10 @@
 import { InventoryError } from '../../shared/errors'
-import { InventoryContext } from '../../shared/types/item.types'
 
-/** Context handed to a use-effect: who used it, which slot, and the open-context hints. */
+/** Context handed to a use-effect: who used it and which slot. */
 export interface UseContext {
   inventoryId: string
   slot: number
   actor?: number
-  ctx?: InventoryContext
 }
 
 /**

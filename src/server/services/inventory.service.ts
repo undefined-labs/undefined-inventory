@@ -319,14 +319,11 @@ export class InventoryService {
   }
 
   /**
-   * Use the item in `slot`: consume `item.consume` units (a vetoable `remove` that fires the
-   * remove hook), then — only on a successful consume — run the registered effect lock-free.
-   * The consume and the effect are separated so an effect can never apply without the item
-   * being removed first (no free-effect dupe). Any failure (not usable, slot moved, veto, or
-   * not enough count) runs NO effect and re-asserts the slot to the actor so their optimistic
-   * client snaps back.
+   * Use the item in `slot`: consume `item.consume` units, then run its registered effect.
+   * The effect runs only on a successful consume (no free-effect dupe); any failure runs no
+   * effect and re-asserts the slot to the actor.
    */
-  async use(id: string, slot: number, actor?: number, ctx?: InventoryContext): Promise<void> {
+  async use(id: string, slot: number, actor?: number): Promise<void> {
     let usedName: string
     try {
       if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
@@ -359,7 +356,7 @@ export class InventoryService {
     }
 
     // Post-consume, lock-free: the effect runs only because the consume above succeeded.
-    await this.behaviors.get(usedName)?.({ inventoryId: id, slot, actor, ctx })
+    await this.behaviors.get(usedName)?.({ inventoryId: id, slot, actor })
   }
 
   /**
