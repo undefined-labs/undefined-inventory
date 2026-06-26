@@ -18,6 +18,7 @@ import { InventoryService } from '../services/inventory.service'
 import { DirtySet } from '../subscribers/dirty-set'
 import { InventorySyncSubscriber } from '../subscribers/inventory-sync.subscriber'
 import { SaveScheduler } from '../subscribers/save-scheduler'
+import { TouchTracker } from '../subscribers/touch-tracker'
 
 type Constructor<T> = new (...args: any[]) => T
 type Provider<T> = T | Constructor<T>
@@ -94,12 +95,13 @@ export class InventoryModule {
     if (!container.isRegistered(InventorySyncContract as never))
       container.register(InventorySyncContract as never, { useValue: new NoopInventorySync() })
 
-    // Internal wiring — always installed. The registry subscribes to `inventory:changed`
-    // to stamp `lastTouchedAt`, so it's constructed with the event bus rather than
-    // auto-resolved.
+    // Internal wiring — always installed.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
-    container.register(InventoryRegistry, { useValue: new InventoryRegistry(InventoryEvents) })
+    container.registerSingleton(InventoryRegistry, InventoryRegistry)
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
+    // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
+    // with the event bus rather than auto-resolved.
+    container.register(TouchTracker, { useValue: new TouchTracker(InventoryEvents) })
     container.registerSingleton(InventoryService, InventoryService)
 
     // Sync subscriber — wired by default; `disableDefaultUi` opts a custom-UI server out of
@@ -121,6 +123,7 @@ export class InventoryModule {
       dirty,
       container.resolve(ViewerRegistry),
       container.resolve(InventoryLockContract as never) as InventoryLockContract,
+      container.resolve(TouchTracker),
       { saveIntervalMs: options?.saveIntervalMs, idleMs: options?.idleMs },
     )
     container.register(SaveScheduler, { useValue: scheduler })
@@ -145,6 +148,7 @@ export class InventoryModule {
     const scheduler = container.resolve(SaveScheduler)
     await scheduler.flushAll()
     container.resolve(DirtySet).dispose()
+    container.resolve(TouchTracker).dispose()
     if (container.isRegistered(InventorySyncSubscriber))
       container.resolve(InventorySyncSubscriber).dispose()
     this.reset()
@@ -156,7 +160,7 @@ export class InventoryModule {
       const container = this.container()
       if (container.isRegistered(SaveScheduler)) container.resolve(SaveScheduler).dispose()
       if (container.isRegistered(DirtySet)) container.resolve(DirtySet).dispose()
-      if (container.isRegistered(InventoryRegistry)) container.resolve(InventoryRegistry).dispose()
+      if (container.isRegistered(TouchTracker)) container.resolve(TouchTracker).dispose()
       if (container.isRegistered(InventorySyncSubscriber))
         container.resolve(InventorySyncSubscriber).dispose()
     }

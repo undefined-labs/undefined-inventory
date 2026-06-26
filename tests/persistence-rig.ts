@@ -10,6 +10,7 @@ import { NoopInventorySync } from '../src/server/transport/noop-sync'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { DirtySet } from '../src/server/subscribers/dirty-set'
 import { SaveScheduler } from '../src/server/subscribers/save-scheduler'
+import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
 
 export const ITEMS: Record<string, ItemDefinition> = {
@@ -40,8 +41,9 @@ export interface RigOptions {
 }
 
 export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
-  const registry = new InventoryRegistry(InventoryEvents, options?.clock)
+  const registry = new InventoryRegistry()
   const dirty = new DirtySet(InventoryEvents)
+  const touch = new TouchTracker(InventoryEvents, options?.clock)
   const viewers = new ViewerRegistry()
   const locks = new InMemoryInventoryLock()
   const service = new InventoryService(
@@ -54,9 +56,10 @@ export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
     viewers,
     new DistanceAccessPolicy(),
     new NoopInventorySync(),
+    touch,
   )
-  const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, {
+  const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, touch, {
     idleMs: options?.idleMs,
   })
-  return { store, registry, dirty, viewers, locks, scheduler, service }
+  return { store, registry, dirty, touch, viewers, locks, scheduler, service }
 }

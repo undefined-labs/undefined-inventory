@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { InventoryStoreContract } from '../src/shared/contracts/inventory-store.contract'
 import { SerializedInventory } from '../src/shared/types/item.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
+import { InventoryEvents } from '../src/server/events/inventory-events'
+import { InventoryEvictedEvent } from '../src/shared/events/inventory-event.types'
 import { InMemoryInventoryStore } from './in-memory.store'
 import { makeRig } from './persistence-rig'
 
@@ -55,7 +57,7 @@ describe('eviction predicate', () => {
   it('evicts an idle, unwatched, unlocked inventory once past the threshold', async () => {
     const store = new InMemoryInventoryStore()
     let now = 0
-    const { service, scheduler, registry, dirty } = makeRig(store, {
+    const { service, scheduler, registry, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -73,13 +75,14 @@ describe('eviction predicate', () => {
     expect(registry.get(id)).toBeNull()
 
     dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 
   it('never evicts an inventory with a viewer, however long idle', async () => {
     const store = new InMemoryInventoryStore()
     let now = 0
-    const { service, scheduler, registry, dirty } = makeRig(store, {
+    const { service, scheduler, registry, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -94,13 +97,14 @@ describe('eviction predicate', () => {
     expect(registry.get(id)).not.toBeNull()
 
     dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 
   it('never evicts an inventory whose lock is held, however long idle', async () => {
     const store = new InMemoryInventoryStore()
     let now = 0
-    const { service, scheduler, registry, locks, dirty } = makeRig(store, {
+    const { service, scheduler, registry, locks, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -122,13 +126,14 @@ describe('eviction predicate', () => {
     expect(registry.get(id)).toBeNull()
 
     dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 
   it('persists a dirty inventory before evicting it', async () => {
     const store = new FailableStore()
     let now = 0
-    const { service, scheduler, registry, dirty } = makeRig(store, {
+    const { service, scheduler, registry, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -145,13 +150,14 @@ describe('eviction predicate', () => {
     expect((await store.load(id))!.items).toEqual([{ slot: 1, name: 'water', count: 1 }])
 
     dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 
   it('never evicts an inventory whose flush failed (no lost unsaved tail)', async () => {
     const store = new FailableStore()
     let now = 0
-    const { service, scheduler, registry, dirty } = makeRig(store, {
+    const { service, scheduler, registry, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -173,13 +179,14 @@ describe('eviction predicate', () => {
     expect((await store.load(id))!.items).toEqual([{ slot: 1, name: 'water', count: 1 }])
 
     dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 
   it('does not evict a still-dirty inventory when a save is already in flight', async () => {
     const store = new FailableStore()
     let now = 0
-    const { service, scheduler, registry, dirty } = makeRig(store, {
+    const { service, scheduler, registry, dirty, touch } = makeRig(store, {
       idleMs: IDLE_MS,
       clock: () => now,
     })
@@ -203,6 +210,33 @@ describe('eviction predicate', () => {
     await ticking
 
     dirty.dispose()
+    touch.dispose()
+    scheduler.dispose()
+  })
+
+  it('emits `evicted` when an inventory leaves memory, so a drop resource can despawn', async () => {
+    const store = new InMemoryInventoryStore()
+    let now = 0
+    const { service, scheduler, dirty, touch } = makeRig(store, {
+      idleMs: IDLE_MS,
+      clock: () => now,
+    })
+    const id = stashInventoryId('a')
+    const evicted: InventoryEvictedEvent[] = []
+    const onEvicted = (e?: unknown) => evicted.push(e as InventoryEvictedEvent)
+    InventoryEvents.on('evicted', onEvicted)
+
+    await service.open('stash', id)
+    await service.addItem(id, 'water', 1)
+
+    now = IDLE_MS * 100
+    await scheduler.sweep(now)
+
+    expect(evicted).toEqual([{ inventoryId: id, type: 'stash' }])
+
+    InventoryEvents.off('evicted', onEvicted)
+    dirty.dispose()
+    touch.dispose()
     scheduler.dispose()
   })
 })

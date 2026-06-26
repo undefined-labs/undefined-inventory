@@ -2,7 +2,9 @@ import { InventoryLockContract } from '../../shared/contracts/inventory-lock.con
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
+import { emitInventoryEvicted } from '../events/inventory-events'
 import { DirtySet } from './dirty-set'
+import { TouchTracker } from './touch-tracker'
 
 export interface SaveSchedulerOptions {
   /** Flush interval in ms. Default 300_000 (5 min) — crash loss window is one interval. */
@@ -28,6 +30,7 @@ export class SaveScheduler {
     private readonly dirty: DirtySet,
     private readonly viewers: ViewerRegistry,
     private readonly locks: InventoryLockContract,
+    private readonly touch: TouchTracker,
     options?: SaveSchedulerOptions,
   ) {
     this.intervalMs = options?.saveIntervalMs ?? 300_000
@@ -53,15 +56,32 @@ export class SaveScheduler {
     // rather than risk dropping an unflushed inventory. The next pass evicts once clean.
     if (this.inFlight) return
     for (const id of this.registry.ids()) {
-      if (this.evictable(id, now)) this.registry.evict(id)
+      if (this.evictable(id, now)) this.evict(id)
     }
   }
 
-  /** Evict iff idle ∧ zero-viewers ∧ no-locks-held. */
+  /**
+   * Drop an evictable inventory from memory and announce it. The `evicted` event lets a drop
+   * resource despawn the world prop — without it the prop outlives the data (a ghost pickup).
+   */
+  private evict(id: string): void {
+    const inv = this.registry.get(id)
+    this.registry.evict(id)
+    this.touch.forget(id)
+    if (inv) emitInventoryEvicted({ inventoryId: inv.id, type: inv.type })
+  }
+
+  /**
+   * Evict iff idle ∧ zero-viewers ∧ no-locks-held ∧ clean. The dirty guard is
+   * defence-in-depth: flush runs strictly before this, but a failed-and-requeued save can
+   * leave an idle inventory still dirty — never drop unsaved state regardless of how it got
+   * there.
+   */
   private evictable(id: string, now: number): boolean {
     if (this.viewers.get(id).size > 0) return false
     if (this.locks.isLocked(id)) return false
-    const touchedAt = this.registry.lastTouchedAt(id)
+    if (this.dirty.has(id)) return false
+    const touchedAt = this.touch.lastTouchedAt(id)
     return touchedAt !== undefined && now - touchedAt >= this.idleMs
   }
 

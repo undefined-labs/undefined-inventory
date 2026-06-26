@@ -31,3 +31,20 @@ export interface PublicInventoryChanged {
   weight: number
   reason: ChangeReason
 }
+
+/** Internal `inventory:evicted` payload — an inventory was swept from memory after flushing. */
+export interface InventoryEvictedEvent {
+  inventoryId: string
+  type: string
+}
+
+/**
+ * Flat public envelope for an eviction. Drop-scoped consumers (a drop resource) listen so
+ * they can despawn the world prop once its inventory leaves memory — otherwise the prop
+ * outlives the data and becomes a ghost pickup.
+ */
+export interface PublicInventoryEvicted {
+  version: 1
+  inventoryId: string
+  type: string
+}

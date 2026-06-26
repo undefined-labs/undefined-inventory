@@ -11,6 +11,7 @@ import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryService } from '../src/server/services/inventory.service'
+import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventorySyncSubscriber } from '../src/server/subscribers/inventory-sync.subscriber'
 import { InMemoryInventoryStore } from './in-memory.store'
 
@@ -73,6 +74,7 @@ function makeHarness(
     viewers,
     access,
     sync,
+    new TouchTracker(InventoryEvents),
   )
   const subscriber = new InventorySyncSubscriber(InventoryEvents, viewers, sync)
   return { service, viewers, sync, subscriber, dispose: () => subscriber.dispose() }
