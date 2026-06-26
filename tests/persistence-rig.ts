@@ -3,7 +3,10 @@ import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.
 import { InventoryStoreContract } from '../src/shared/contracts/inventory-store.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
+import { DistanceAccessPolicy } from '../src/server/policies/distance-access.policy'
+import { NoopInventorySync } from '../src/server/policies/noop-sync'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { DirtySet } from '../src/server/subscribers/dirty-set'
 import { SaveScheduler } from '../src/server/subscribers/save-scheduler'
@@ -40,6 +43,9 @@ export function makeRig(store: InventoryStoreContract) {
     registry,
     new InMemoryInventoryLock(),
     InventoryEvents,
+    new ViewerRegistry(),
+    new DistanceAccessPolicy(),
+    new NoopInventorySync(),
   )
   const scheduler = new SaveScheduler(store, registry, dirty)
   return { store, registry, dirty, scheduler, service }

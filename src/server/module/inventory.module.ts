@@ -1,16 +1,22 @@
 import { GLOBAL_CONTAINER } from '@open-core/framework/kernel'
 import type { DependencyContainer } from 'tsyringe'
+import { AccessPolicyContract } from '../../shared/contracts/access-policy.contract'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
+import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { configureInventoryEvents, InventoryEvents } from '../events/inventory-events'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
+import { DistanceAccessPolicy } from '../policies/distance-access.policy'
 import { InMemoryInventoryLock } from '../policies/in-memory-lock'
+import { NoopInventorySync } from '../policies/noop-sync'
 import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-capacity.policy'
 import { InventoryRegistry } from '../registry/inventory.registry'
+import { ViewerRegistry } from '../registry/viewer.registry'
 import { InventoryService } from '../services/inventory.service'
 import { DirtySet } from '../subscribers/dirty-set'
+import { InventorySyncSubscriber } from '../subscribers/inventory-sync.subscriber'
 import { SaveScheduler } from '../subscribers/save-scheduler'
 
 type Constructor<T> = new (...args: any[]) => T
@@ -23,6 +29,8 @@ export interface InventoryModuleInstallOptions {
   saveIntervalMs?: number
   /** Mirror `inventory:changed` to a cross-resource event. Default OFF. */
   bridgeExternalEvents?: boolean
+  /** Skip wiring the default sync subscriber, to ship a UI that drives the protocol itself. */
+  disableDefaultUi?: boolean
 }
 
 /**
@@ -48,6 +56,14 @@ export class InventoryModule {
     this.bind(InventoryLockContract, provider)
   }
 
+  static setAccessPolicy(provider: Provider<AccessPolicyContract>): void {
+    this.bind(AccessPolicyContract, provider)
+  }
+
+  static setSync(provider: Provider<InventorySyncContract>): void {
+    this.bind(InventorySyncContract, provider)
+  }
+
   static install(options?: InventoryModuleInstallOptions): void {
     if (this.installed) return
     const container = this.container()
@@ -71,11 +87,27 @@ export class InventoryModule {
       })
     if (!container.isRegistered(InventoryLockContract as never))
       container.register(InventoryLockContract as never, { useValue: new InMemoryInventoryLock() })
+    if (!container.isRegistered(AccessPolicyContract as never))
+      container.register(AccessPolicyContract as never, { useValue: new DistanceAccessPolicy() })
+    if (!container.isRegistered(InventorySyncContract as never))
+      container.register(InventorySyncContract as never, { useValue: new NoopInventorySync() })
 
     // Internal wiring — always installed.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
     container.registerSingleton(InventoryRegistry, InventoryRegistry)
+    container.registerSingleton(ViewerRegistry, ViewerRegistry)
     container.registerSingleton(InventoryService, InventoryService)
+
+    // Sync subscriber — wired by default; `disableDefaultUi` opts a custom-UI server out of
+    // the built-in broadcast so it can drive the protocol itself.
+    if (!options?.disableDefaultUi) {
+      const sync = new InventorySyncSubscriber(
+        InventoryEvents,
+        container.resolve(ViewerRegistry),
+        container.resolve(InventorySyncContract as never) as InventorySyncContract,
+      )
+      container.register(InventorySyncSubscriber, { useValue: sync })
+    }
 
     const dirty = new DirtySet(InventoryEvents)
     container.register(DirtySet, { useValue: dirty })
@@ -107,6 +139,8 @@ export class InventoryModule {
     const scheduler = container.resolve(SaveScheduler)
     await scheduler.flushAll()
     container.resolve(DirtySet).dispose()
+    if (container.isRegistered(InventorySyncSubscriber))
+      container.resolve(InventorySyncSubscriber).dispose()
     this.reset()
   }
 
@@ -116,6 +150,8 @@ export class InventoryModule {
       const container = this.container()
       if (container.isRegistered(SaveScheduler)) container.resolve(SaveScheduler).dispose()
       if (container.isRegistered(DirtySet)) container.resolve(DirtySet).dispose()
+      if (container.isRegistered(InventorySyncSubscriber))
+        container.resolve(InventorySyncSubscriber).dispose()
     }
     this.container().clearInstances?.()
     this.container().reset?.()
