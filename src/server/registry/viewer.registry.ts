@@ -34,7 +34,7 @@ export class ViewerRegistry {
     return this.byInventory.get(inventoryId) ?? new Set()
   }
 
-  private index<K>(map: Map<K, Set<number | string>>, key: K, value: number | string): void {
+  private index<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
     let set = map.get(key)
     if (!set) {
       set = new Set()
@@ -43,7 +43,7 @@ export class ViewerRegistry {
     set.add(value)
   }
 
-  private deindex<K>(map: Map<K, Set<number | string>>, key: K, value: number | string): void {
+  private deindex<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
     const set = map.get(key)
     if (!set) return
     set.delete(value)

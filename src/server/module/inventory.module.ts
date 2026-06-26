@@ -10,7 +10,7 @@ import { configureInventoryEvents, InventoryEvents } from '../events/inventory-e
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
 import { DistanceAccessPolicy } from '../policies/distance-access.policy'
 import { InMemoryInventoryLock } from '../policies/in-memory-lock'
-import { NoopInventorySync } from '../policies/noop-sync'
+import { NoopInventorySync } from '../transport/noop-sync'
 import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-capacity.policy'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
