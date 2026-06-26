@@ -54,6 +54,14 @@ export function runStoreConformance(
       expect(loaded!.items).toEqual([{ slot: 1, name: 'water', count: 1 }])
     })
 
+    test('delete removes a row so a later load is null; deleting an absent id is a no-op', async () => {
+      await store.saveMany([inv('container:uid-1', [{ slot: 1, name: 'water', count: 2 }])])
+      await store.delete('container:uid-1')
+      await expect(store.load('container:uid-1')).resolves.toBeNull()
+      // Idempotent: deleting what isn't there must not throw (orphan-GC may race a flush).
+      await expect(store.delete('container:absent')).resolves.toBeUndefined()
+    })
+
     if (factory.poison) {
       const poison = factory.poison
       test('saveMany is one transaction: a poisoned batch lands NEITHER entry', async () => {

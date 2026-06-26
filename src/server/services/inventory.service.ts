@@ -9,14 +9,14 @@ import { InventorySyncContract } from '../../shared/contracts/inventory-sync.con
 import { GiveAccessContract } from '../../shared/contracts/give-access.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryError } from '../../shared/errors'
-import { dropInventoryId } from '../../shared/utils/inventory-id'
+import { dropInventoryId, containerInventoryId, parseInventoryId } from '../../shared/utils/inventory-id'
 import { randomUUID } from 'node:crypto'
 import {
   ChangeReason,
   InventoryChangedEvent,
   SlotChange,
 } from '../../shared/events/inventory-event.types'
-import { InventoryContext, ItemDefinition, Meta } from '../../shared/types/item.types'
+import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types/item.types'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { TouchTracker } from '../subscribers/touch-tracker'
@@ -80,9 +80,13 @@ export class InventoryService {
   private async hydrate(type: string, id: string, ctx?: InventoryContext): Promise<Inventory> {
     const serialized = await this.store.load(id)
     const capacity = this.capacity.resolve(type, id, ctx)
+    // A container is never itself a holder (depth 1), so only non-container inventories roll up
+    // contained weight — this also stops the rollup from recursing past one level.
+    const options =
+      type === 'container' ? undefined : { extraWeightOf: this.containerWeightOf }
     const inv = serialized
-      ? this.registry.from(serialized, capacity)
-      : this.registry.create(type, id, capacity)
+      ? this.registry.from(serialized, capacity, options)
+      : this.registry.create(type, id, capacity, options)
     this.registry.set(inv)
     // Seed the idle clock so a just-opened, never-mutated inventory isn't instantly
     // eviction-eligible before it has ever been touched.
@@ -90,16 +94,90 @@ export class InventoryService {
     return inv
   }
 
+  /**
+   * Rolled-up weight a holder slot contributes beyond its own stack: the live weight of the
+   * container it backs (depth 1). Zero unless the slot holds a container item whose row is
+   * currently open. An unopened container contributes nothing here — its weight only counts
+   * once it (and thus its contents) is hydrated, matching ox's open-to-weigh behaviour.
+   */
+  private readonly containerWeightOf = (slot: Slot): number => {
+    const def = this.items.get(slot.name)
+    const uid = slot.metadata?.uid as string | undefined
+    if (!def?.container || !uid) return 0
+    const container = this.registry.get(containerInventoryId(uid))
+    return container ? container.weight : 0
+  }
+
   /** Add `count` of an item to an open inventory. Emits `inventory:changed`. */
   async addItem(id: string, itemName: string, count: number, metadata?: Meta): Promise<void> {
     const def = this.requireItem(itemName)
-    await this.mutate(id, 'add', (inv) => inv.addItem(def, count, metadata))
+    // A container item gets a freshly-minted uid so its contents row is keyed to THIS instance
+    // alone — a brand-new bag can never alias a destroyed one's lingering row (the dupe guard).
+    const meta = def.container ? { ...metadata, uid: metadata?.uid ?? randomUUID() } : metadata
+    await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta))
+  }
+
+  /**
+   * Open the container backed by the item in `holderId`'s `holderSlot`, hydrating its own row
+   * (`container:<uid>`). Capacity comes from the item's `container.size`. Depth is capped at 1:
+   * a container item may not be opened from inside another container.
+   */
+  async openContainer(
+    holderId: string,
+    holderSlot: number,
+    viewer?: number,
+  ): Promise<string> {
+    const holder = this.requireOpen(holderId)
+    if (parseInventoryId(holderId).type === 'container')
+      throw new InventoryError('container nesting is not allowed (depth 1)')
+
+    const item = holder.getSlot(holderSlot)
+    if (!item) throw new InventoryError(`holder slot ${holderSlot} is empty`)
+    const def = this.requireItem(item.name)
+    if (!def.container) throw new InventoryError(`item '${item.name}' is not a container`)
+    const uid = item.metadata?.uid as string | undefined
+    if (!uid) throw new InventoryError(`container item '${item.name}' has no uid`)
+
+    const id = containerInventoryId(uid)
+    await this.open('container', id, { size: def.container.size }, viewer)
+    return id
   }
 
   /** Remove `count` of an item from an open inventory. Emits `inventory:changed`. */
   async removeItem(id: string, itemName: string, count: number, metadata?: Meta): Promise<void> {
     const def = this.requireItem(itemName)
     await this.mutate(id, 'remove', (inv) => inv.removeItem(def, count, metadata))
+  }
+
+  /**
+   * Tear down the container parent at `holderId/holderSlot`: remove the parent item and
+   * cascade-delete the container's own row, evicting its live instance (orphan-GC) — without
+   * this, a destroyed bag's contents would linger as an unreachable junk row. Done under the
+   * holder's lock so the destroy and cascade can't interleave with a concurrent mutation.
+   * Scoped to containers; destroying arbitrary items is intentionally out of scope.
+   */
+  async destroyContainer(holderId: string, holderSlot: number): Promise<void> {
+    if (!this.locks.acquire(holderId))
+      throw new InventoryError(`inventory '${holderId}' is locked`)
+    try {
+      const holder = this.requireOpen(holderId)
+      const item = holder.getSlot(holderSlot)
+      if (!item) throw new InventoryError(`holder slot ${holderSlot} is empty`)
+      const def = this.requireItem(item.name)
+      const uid = item.metadata?.uid as string | undefined
+      if (!def.container || !uid)
+        throw new InventoryError(`item '${item.name}' at slot ${holderSlot} is not a container`)
+
+      holder.setSlot(holderSlot, def, 0)
+      this.emitChanged(holder, [holderSlot], 'remove')
+
+      // Cascade the container row only after the parent is gone from the holder.
+      const containerId = containerInventoryId(uid)
+      this.registry.evict(containerId)
+      await this.store.delete(containerId)
+    } finally {
+      this.locks.release(holderId)
+    }
   }
 
   /**
