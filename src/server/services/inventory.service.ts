@@ -23,6 +23,7 @@ import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { TouchTracker } from '../subscribers/touch-tracker'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
+import { emitInventoryChanged } from '../events/inventory-events'
 
 /**
  * Orchestrates inventory open and mutation. Memory is the source of truth; persistence is
@@ -417,7 +418,9 @@ export class InventoryService {
       weight: inv.weight,
       reason,
     }
-    this.events.emit('changed', event)
+    // Route through the wrapper, not the raw bus, so a `changed` mutation also reaches the
+    // opt-in external bridge — the same seam `emitInventoryEvicted` already crosses.
+    emitInventoryChanged(event)
   }
 
   private requireOpen(id: string): Inventory {
