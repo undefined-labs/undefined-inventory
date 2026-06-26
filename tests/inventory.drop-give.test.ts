@@ -10,6 +10,7 @@ import { playerInventoryId, parseInventoryId } from '../src/shared/utils/invento
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
+import { HookBus } from '../src/server/policies/hook-bus'
 import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryService } from '../src/server/services/inventory.service'
@@ -75,6 +76,7 @@ function makeService(overrides?: { store?: InMemoryInventoryStore; give?: GiveAc
     sync,
     new TouchTracker(InventoryEvents),
     give,
+    new HookBus(),
   )
   return { service, store, registry, give, sync }
 }
