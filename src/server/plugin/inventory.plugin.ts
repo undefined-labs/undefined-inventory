@@ -1,7 +1,9 @@
 import type { OpenCorePlugin, PluginInstallContext } from '@open-core/framework/server'
+import { AccessPolicyContract } from '../../shared/contracts/access-policy.contract'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
+import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryModule, InventoryModuleInstallOptions } from '../module/inventory.module'
 
@@ -13,6 +15,10 @@ export interface InventoryServerPluginOptions extends InventoryModuleInstallOpti
   items: Provider<ItemRegistryContract>
   capacityPolicy?: Provider<CapacityPolicyContract>
   lock?: Provider<InventoryLockContract>
+  /** Authorises open (distance/ownership). Default: distance gate. */
+  accessPolicy?: Provider<AccessPolicyContract>
+  /** Server→client transport. Default: no-op (swap in a FiveM net adapter for live UI). */
+  sync?: Provider<InventorySyncContract>
 }
 
 /**
@@ -35,11 +41,14 @@ export function inventoryServerPlugin(
       InventoryModule.setItemRegistry(options.items)
       if (options.capacityPolicy) InventoryModule.setCapacityPolicy(options.capacityPolicy)
       if (options.lock) InventoryModule.setLock(options.lock)
+      if (options.accessPolicy) InventoryModule.setAccessPolicy(options.accessPolicy)
+      if (options.sync) InventoryModule.setSync(options.sync)
 
       InventoryModule.install({
         types: options.types,
         saveIntervalMs: options.saveIntervalMs,
         bridgeExternalEvents: options.bridgeExternalEvents,
+        disableDefaultUi: options.disableDefaultUi,
       })
     },
     async stop() {

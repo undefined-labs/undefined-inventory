@@ -1,9 +1,11 @@
 import { inject, injectable } from 'tsyringe'
 import type { OpenCoreServerLibrary } from '@open-core/framework/server'
 import { Inventory, moveItem } from '../../shared/domain/inventory'
+import { AccessPolicyContract } from '../../shared/contracts/access-policy.contract'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
 import { InventoryStoreContract } from '../../shared/contracts/inventory-store.contract'
+import { InventorySyncContract } from '../../shared/contracts/inventory-sync.contract'
 import { ItemRegistryContract } from '../../shared/contracts/item-registry.contract'
 import { InventoryError } from '../../shared/errors'
 import {
@@ -13,6 +15,7 @@ import {
 } from '../../shared/events/inventory-event.types'
 import { InventoryContext, ItemDefinition, Meta } from '../../shared/types/item.types'
 import { InventoryRegistry } from '../registry/inventory.registry'
+import { ViewerRegistry } from '../registry/viewer.registry'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
 
 /**
@@ -28,23 +31,52 @@ export class InventoryService {
     @inject(InventoryRegistry) private readonly registry: InventoryRegistry,
     @inject(InventoryLockContract as never) private readonly locks: InventoryLockContract,
     @inject(INVENTORY_EVENTS) private readonly events: OpenCoreServerLibrary,
+    @inject(ViewerRegistry) private readonly viewers: ViewerRegistry,
+    @inject(AccessPolicyContract as never) private readonly access: AccessPolicyContract,
+    @inject(InventorySyncContract as never) private readonly sync: InventorySyncContract,
   ) {}
 
   /**
    * Resolve the live inventory for `id`, loading it on first open. A load miss is normal:
    * the inventory is created born-fresh empty. Capacity always comes from policy.
    */
-  async open(type: string, id: string, ctx?: InventoryContext): Promise<Inventory> {
-    const live = this.registry.get(id)
-    if (live) return live
+  async open(
+    type: string,
+    id: string,
+    ctx?: InventoryContext,
+    viewer?: number,
+  ): Promise<Inventory> {
+    // Access gates the open — distance/ownership/faction. A denied viewer never registers
+    // and never receives state; access (can-open) is distinct from viewing (currently-watching).
+    if (viewer !== undefined && !this.access.canOpen(id, viewer, ctx))
+      throw new InventoryError(`player '${viewer}' may not open inventory '${id}'`)
 
-    // capacity is re-resolved every open and never persisted → migration-free resize
+    const live = this.registry.get(id) ?? (await this.hydrate(type, id, ctx))
+
+    if (viewer !== undefined) {
+      this.viewers.add(id, viewer)
+      this.sync.setInventory(viewer, live.serialize())
+    }
+    return live
+  }
+
+  /** Close a viewer's session — drops them from the viewer set so sync stops targeting them. */
+  close(id: string, viewer: number): void {
+    this.viewers.remove(id, viewer)
+  }
+
+  /** Drop a disconnected player from every inventory they were viewing (O(their opens)). */
+  disconnect(player: number): void {
+    this.viewers.removePlayer(player)
+  }
+
+  /** Load-or-create the live aggregate. Capacity is re-resolved every time, never persisted. */
+  private async hydrate(type: string, id: string, ctx?: InventoryContext): Promise<Inventory> {
     const serialized = await this.store.load(id)
     const capacity = this.capacity.resolve(type, id, ctx)
     const inv = serialized
       ? this.registry.from(serialized, capacity)
       : this.registry.create(type, id, capacity)
-
     this.registry.set(inv)
     return inv
   }
@@ -73,6 +105,7 @@ export class InventoryService {
     fromSlot: number,
     toSlot: number,
     count: number,
+    actor?: number,
   ): Promise<void> {
     const ids = [...new Set([fromId, toId])].sort()
     const acquired: string[] = []
@@ -99,6 +132,16 @@ export class InventoryService {
       // Persist both sides atomically. Same-inv → one snapshot (dedupe via the live set).
       const snapshots = [...new Set([from, to])].map((inv) => inv.serialize())
       await this.store.saveMany(snapshots)
+    } catch (error) {
+      // A rejected move emits no `changed`, so the actor's optimistic prediction is never
+      // corrected by the broadcast path. Re-assert the slots it named, per-inventory, to the
+      // actor — closing the optimism-leak desync.
+      if (actor !== undefined)
+        this.reassert(actor, [
+          { id: fromId, slot: fromSlot },
+          { id: toId, slot: toSlot },
+        ])
+      throw error
     } finally {
       for (const id of acquired.reverse()) this.locks.release(id)
     }
@@ -127,6 +170,26 @@ export class InventoryService {
   /** Translate domain-returned slot numbers into authoritative `SlotChange`s. */
   private toSlotChanges(inv: Inventory, slots: number[]): SlotChange[] {
     return slots.map((slot) => ({ slot, item: inv.getSlot(slot) }))
+  }
+
+  /**
+   * Unicast the current truth of the given (inventory, slot) refs to one actor, grouped per
+   * inventory. Used after a rejected action: re-pushes real slot state so the actor's
+   * optimistic prediction snaps back. Refs in unopened inventories are skipped — nothing to
+   * assert. A duplicate (id, slot) ref collapses to one re-asserted change.
+   */
+  private reassert(actor: number, refs: { id: string; slot: number }[]): void {
+    const slotsByInventory = new Map<string, Set<number>>()
+    for (const { id, slot } of refs) {
+      const slots = slotsByInventory.get(id) ?? new Set<number>()
+      slots.add(slot)
+      slotsByInventory.set(id, slots)
+    }
+    for (const [id, slots] of slotsByInventory) {
+      const inv = this.registry.get(id)
+      if (!inv) continue
+      this.sync.updateSlots([actor], id, this.toSlotChanges(inv, [...slots]))
+    }
   }
 
   private emitChanged(inv: Inventory, changed: number[], reason: ChangeReason): void {

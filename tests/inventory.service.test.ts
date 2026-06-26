@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ItemRegistryContract } from '../src/shared/contracts/item-registry.contract'
 import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
+import { AccessPolicyContract } from '../src/shared/contracts/access-policy.contract'
+import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryChangedEvent } from '../src/shared/events/inventory-event.types'
@@ -30,6 +33,17 @@ class FixedCapacityPolicy extends CapacityPolicyContract {
   }
 }
 
+class AllowAccess extends AccessPolicyContract {
+  canOpen(): boolean {
+    return true
+  }
+}
+
+class NoopSync extends InventorySyncContract {
+  setInventory(): void {}
+  updateSlots(): void {}
+}
+
 function makeService(overrides?: {
   store?: InMemoryInventoryStore
   capacity?: CapacityPolicyContract
@@ -48,6 +62,9 @@ function makeService(overrides?: {
     registry,
     new InMemoryInventoryLock(),
     InventoryEvents,
+    new ViewerRegistry(),
+    new AllowAccess(),
+    new NoopSync(),
   )
   return { service, store, registry }
 }
@@ -149,6 +166,9 @@ describe('InventoryService mutations', () => {
       registry,
       lock,
       InventoryEvents,
+      new ViewerRegistry(),
+      new AllowAccess(),
+      new NoopSync(),
     )
     const id = stashInventoryId('locker-1')
     const inv = await service.open('stash', id)
