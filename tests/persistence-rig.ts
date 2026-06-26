@@ -33,20 +33,30 @@ export class FixedCapacityPolicy extends CapacityPolicyContract {
  * over a caller-supplied store (share one store across a restart boundary, or pass a
  * fake that fails/blocks).
  */
-export function makeRig(store: InventoryStoreContract) {
-  const registry = new InventoryRegistry()
+export interface RigOptions {
+  /** Idle threshold for eviction; also lets a test inject a deterministic clock. */
+  idleMs?: number
+  clock?: () => number
+}
+
+export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
+  const registry = new InventoryRegistry(InventoryEvents, options?.clock)
   const dirty = new DirtySet(InventoryEvents)
+  const viewers = new ViewerRegistry()
+  const locks = new InMemoryInventoryLock()
   const service = new InventoryService(
     store,
     new StaticItemRegistry(),
     new FixedCapacityPolicy(),
     registry,
-    new InMemoryInventoryLock(),
+    locks,
     InventoryEvents,
-    new ViewerRegistry(),
+    viewers,
     new DistanceAccessPolicy(),
     new NoopInventorySync(),
   )
-  const scheduler = new SaveScheduler(store, registry, dirty)
-  return { store, registry, dirty, scheduler, service }
+  const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, {
+    idleMs: options?.idleMs,
+  })
+  return { store, registry, dirty, viewers, locks, scheduler, service }
 }

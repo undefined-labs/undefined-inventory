@@ -27,6 +27,8 @@ export interface InventoryModuleInstallOptions {
   types?: TypeCapacityMap
   /** Write-behind flush interval (ms). Default 300_000. */
   saveIntervalMs?: number
+  /** Idle threshold (ms) before an unwatched, unlocked inventory is eviction-eligible. */
+  idleMs?: number
   /** Mirror `inventory:changed` to a cross-resource event. Default OFF. */
   bridgeExternalEvents?: boolean
   /** Skip wiring the default sync subscriber, to ship a UI that drives the protocol itself. */
@@ -92,9 +94,11 @@ export class InventoryModule {
     if (!container.isRegistered(InventorySyncContract as never))
       container.register(InventorySyncContract as never, { useValue: new NoopInventorySync() })
 
-    // Internal wiring — always installed.
+    // Internal wiring — always installed. The registry subscribes to `inventory:changed`
+    // to stamp `lastTouchedAt`, so it's constructed with the event bus rather than
+    // auto-resolved.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
-    container.registerSingleton(InventoryRegistry, InventoryRegistry)
+    container.register(InventoryRegistry, { useValue: new InventoryRegistry(InventoryEvents) })
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
     container.registerSingleton(InventoryService, InventoryService)
 
@@ -115,7 +119,9 @@ export class InventoryModule {
       container.resolve(InventoryStoreContract as never) as InventoryStoreContract,
       container.resolve(InventoryRegistry),
       dirty,
-      { saveIntervalMs: options?.saveIntervalMs },
+      container.resolve(ViewerRegistry),
+      container.resolve(InventoryLockContract as never) as InventoryLockContract,
+      { saveIntervalMs: options?.saveIntervalMs, idleMs: options?.idleMs },
     )
     container.register(SaveScheduler, { useValue: scheduler })
     scheduler.start()
@@ -150,6 +156,7 @@ export class InventoryModule {
       const container = this.container()
       if (container.isRegistered(SaveScheduler)) container.resolve(SaveScheduler).dispose()
       if (container.isRegistered(DirtySet)) container.resolve(DirtySet).dispose()
+      if (container.isRegistered(InventoryRegistry)) container.resolve(InventoryRegistry).dispose()
       if (container.isRegistered(InventorySyncSubscriber))
         container.resolve(InventorySyncSubscriber).dispose()
     }
