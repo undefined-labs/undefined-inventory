@@ -213,7 +213,7 @@ describe('containers: orphan GC on destroy', () => {
     expect(await store.load(containerId)).not.toBeNull()
     expect(registry.get(containerId)).not.toBeNull()
 
-    await service.destroyItem(holder, 1)
+    await service.destroyContainer(holder, 1)
 
     // Parent item gone from the holder; container row and live instance cascade-deleted.
     const inv = await service.open('player', holder)
@@ -222,15 +222,12 @@ describe('containers: orphan GC on destroy', () => {
     expect(registry.get(containerId)).toBeNull()
   })
 
-  it('destroying a non-container item just removes it (no cascade, no crash)', async () => {
+  it('destroying a non-container item is rejected', async () => {
     const { service } = makeService()
     const holder = playerInventoryId('grace')
     await service.open('player', holder)
     await service.addItem(holder, 'water', 3)
 
-    await service.destroyItem(holder, 1)
-
-    const inv = await service.open('player', holder)
-    expect(inv.getSlot(1)).toBeNull()
+    await expect(service.destroyContainer(holder, 1)).rejects.toThrow(/not a container/)
   })
 })

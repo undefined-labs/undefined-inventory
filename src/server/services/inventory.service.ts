@@ -150,12 +150,13 @@ export class InventoryService {
   }
 
   /**
-   * Destroy the whole item stack at `holderId/holderSlot`. If it backs a container, the
-   * container's own row is cascade-deleted and its live instance evicted (orphan-GC) — without
+   * Tear down the container parent at `holderId/holderSlot`: remove the parent item and
+   * cascade-delete the container's own row, evicting its live instance (orphan-GC) — without
    * this, a destroyed bag's contents would linger as an unreachable junk row. Done under the
    * holder's lock so the destroy and cascade can't interleave with a concurrent mutation.
+   * Scoped to containers; destroying arbitrary items is intentionally out of scope.
    */
-  async destroyItem(holderId: string, holderSlot: number): Promise<void> {
+  async destroyContainer(holderId: string, holderSlot: number): Promise<void> {
     if (!this.locks.acquire(holderId))
       throw new InventoryError(`inventory '${holderId}' is locked`)
     try {
@@ -164,16 +165,16 @@ export class InventoryService {
       if (!item) throw new InventoryError(`holder slot ${holderSlot} is empty`)
       const def = this.requireItem(item.name)
       const uid = item.metadata?.uid as string | undefined
+      if (!def.container || !uid)
+        throw new InventoryError(`item '${item.name}' at slot ${holderSlot} is not a container`)
 
       holder.setSlot(holderSlot, def, 0)
       this.emitChanged(holder, [holderSlot], 'remove')
 
       // Cascade the container row only after the parent is gone from the holder.
-      if (def.container && uid) {
-        const containerId = containerInventoryId(uid)
-        this.registry.evict(containerId)
-        await this.store.delete(containerId)
-      }
+      const containerId = containerInventoryId(uid)
+      this.registry.evict(containerId)
+      await this.store.delete(containerId)
     } finally {
       this.locks.release(holderId)
     }
