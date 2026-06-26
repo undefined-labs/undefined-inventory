@@ -17,6 +17,7 @@ import { NoopInventorySync } from '../transport/noop-sync'
 import { ProximityGivePolicy } from '../policies/proximity-give.policy'
 import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-capacity.policy'
 import { InventoryRegistry } from '../registry/inventory.registry'
+import { ItemBehaviorRegistry, ItemBehaviorHandler } from '../registry/item-behavior.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { InventoryService } from '../services/inventory.service'
 import { DirtySet } from '../subscribers/dirty-set'
@@ -119,6 +120,7 @@ export class InventoryModule {
     // Internal wiring — always installed.
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
     container.registerSingleton(InventoryRegistry, InventoryRegistry)
+    container.registerSingleton(ItemBehaviorRegistry, ItemBehaviorRegistry)
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
     // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
     // with the event bus rather than auto-resolved.
@@ -151,6 +153,11 @@ export class InventoryModule {
     scheduler.start()
 
     this.installed = true
+  }
+
+  /** Register a server-defined use-effect for an item. Double-registering one item throws. */
+  static registerItemBehavior(itemName: string, handler: ItemBehaviorHandler): void {
+    this.container().resolve(ItemBehaviorRegistry).register(itemName, handler)
   }
 
   static resolveService(): InventoryService {

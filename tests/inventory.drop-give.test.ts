@@ -8,6 +8,7 @@ import { ItemDefinition, InventoryContext } from '../src/shared/types/item.types
 import { SlotChange, InventoryEvictedEvent } from '../src/shared/events/inventory-event.types'
 import { playerInventoryId, parseInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -77,6 +78,7 @@ function makeService(overrides?: { store?: InMemoryInventoryStore; give?: GiveAc
     new TouchTracker(InventoryEvents),
     give,
     new HookBus(),
+    new ItemBehaviorRegistry(),
   )
   return { service, store, registry, give, sync }
 }

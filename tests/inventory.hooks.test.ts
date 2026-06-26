@@ -7,6 +7,7 @@ import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.co
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { playerInventoryId, stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { InventoryEvents } from '../src/server/events/inventory-events'
@@ -67,6 +68,7 @@ function makeService(hooks = new HookBus()): {
     new TouchTracker(InventoryEvents),
     new AllowGive(),
     hooks,
+    new ItemBehaviorRegistry(),
   )
   return { service, hooks }
 }

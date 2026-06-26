@@ -19,6 +19,7 @@ import {
 } from '../../shared/events/inventory-event.types'
 import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types/item.types'
 import { InventoryRegistry } from '../registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { TouchTracker } from '../subscribers/touch-tracker'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
@@ -42,6 +43,7 @@ export class InventoryService {
     @inject(TouchTracker) private readonly touch: TouchTracker,
     @inject(GiveAccessContract as never) private readonly giveAccess: GiveAccessContract,
     @inject(HookContract as never) private readonly hooks: HookContract,
+    @inject(ItemBehaviorRegistry) private readonly behaviors: ItemBehaviorRegistry,
   ) {}
 
   /**
@@ -314,6 +316,47 @@ export class InventoryService {
     if (toSlot === null) return rejectGive(`target inventory '${targetId}' is full`)
 
     await this.moveItem(fromId, targetId, fromSlot, toSlot, count, actor)
+  }
+
+  /**
+   * Use the item in `slot`: consume `item.consume` units, then run its registered effect.
+   * The effect runs only on a successful consume (no free-effect dupe); any failure runs no
+   * effect and re-asserts the slot to the actor.
+   */
+  async use(id: string, slot: number, actor?: number): Promise<void> {
+    let usedName: string
+    try {
+      if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
+      try {
+        const inv = this.requireOpen(id)
+        // Re-validate against live truth inside the lock: the client's pre-gate is advisory,
+        // so the slot may have emptied or changed item since it raised the action.
+        const item = inv.getSlot(slot)
+        if (!item) throw new InventoryError(`slot ${slot} is empty`)
+        const def = this.requireItem(item.name)
+        if (def.consume === undefined) throw new InventoryError(`item '${item.name}' is not usable`)
+
+        // Consume = a real remove: vetoable via canMutate{remove} and it fires the remove hook.
+        // A veto or an over-remove throws here, before any effect runs.
+        if (!this.hooks.canMutate({ kind: 'remove', inventoryId: id, type: inv.type, item: item.name, count: def.consume, metadata: item.metadata }))
+          throw new InventoryError(`use of '${item.name}' on '${id}' was vetoed`)
+        const changed = inv.removeItem(def, def.consume, item.metadata)
+        this.emitChanged(inv, changed, 'remove')
+        // Capture the validated name before unlocking — the slot may now be empty or hold a
+        // different stack, so the effect's identity must come from inside the lock.
+        usedName = item.name
+      } finally {
+        this.locks.release(id)
+      }
+    } catch (error) {
+      // A failed use never emitted `changed`, so the actor's optimistic prediction stands
+      // uncorrected — snap the named slot back to them, mirroring a rejected move/give.
+      if (actor !== undefined) this.reassert(actor, [{ id, slot }])
+      throw error
+    }
+
+    // Post-consume, lock-free: the effect runs only because the consume above succeeded.
+    await this.behaviors.get(usedName)?.({ inventoryId: id, slot, actor })
   }
 
   /**

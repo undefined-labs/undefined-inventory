@@ -7,6 +7,7 @@ import { ItemDefinition, SerializedInventory } from '../src/shared/types/item.ty
 import { SlotChange } from '../src/shared/events/inventory-event.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -79,6 +80,7 @@ function makeHarness(
     new TouchTracker(InventoryEvents),
     new ProximityGivePolicy(new InMemoryInventoryLock()),
     new HookBus(),
+    new ItemBehaviorRegistry(),
   )
   const subscriber = new InventorySyncSubscriber(InventoryEvents, viewers, sync)
   return { service, viewers, sync, subscriber, dispose: () => subscriber.dispose() }

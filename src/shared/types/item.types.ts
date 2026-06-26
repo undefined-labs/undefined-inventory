@@ -25,6 +25,12 @@ export interface ItemDefinition {
    * item is non-stackable by construction — each instance owns a distinct row.
    */
   container?: { size: number }
+  /**
+   * Units removed per `use`. Its presence marks an item as usable (a consumable/tool); the
+   * count is the data side of a use, the effect lives in the `ItemBehaviorRegistry`. Absent →
+   * the item is not usable.
+   */
+  consume?: number
 }
 
 /** A live stack occupying one slot. */
