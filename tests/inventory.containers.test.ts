@@ -7,6 +7,7 @@ import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.co
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { playerInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -73,6 +74,7 @@ function makeService(store = new InMemoryInventoryStore()): {
     new TouchTracker(InventoryEvents),
     new AllowGive(),
     new HookBus(),
+    new ItemBehaviorRegistry(),
   )
   return { service, store, registry }
 }
@@ -175,6 +177,7 @@ describe('containers: weight rollup (depth 1)', () => {
       new TouchTracker(InventoryEvents),
       new AllowGive(),
       new HookBus(),
+      new ItemBehaviorRegistry(),
     )
     const holder = playerInventoryId('dave')
     const inv = await service.open('player', holder)

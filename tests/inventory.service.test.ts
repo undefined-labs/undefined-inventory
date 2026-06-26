@@ -7,6 +7,7 @@ import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.co
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -77,6 +78,7 @@ function makeService(overrides?: {
     new TouchTracker(InventoryEvents),
     new AllowGive(),
     new HookBus(),
+    new ItemBehaviorRegistry(),
   )
   return { service, store, registry }
 }
@@ -184,6 +186,7 @@ describe('InventoryService mutations', () => {
       new TouchTracker(InventoryEvents),
       new AllowGive(),
       new HookBus(),
+      new ItemBehaviorRegistry(),
     )
     const id = stashInventoryId('locker-1')
     const inv = await service.open('stash', id)

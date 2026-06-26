@@ -3,6 +3,7 @@ import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.
 import { InventoryStoreContract } from '../src/shared/contracts/inventory-store.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
+import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -61,6 +62,7 @@ export function makeRig(store: InventoryStoreContract, options?: RigOptions) {
     touch,
     new ProximityGivePolicy(locks),
     new HookBus(),
+    new ItemBehaviorRegistry(),
   )
   const scheduler = new SaveScheduler(store, registry, dirty, viewers, locks, touch, {
     idleMs: options?.idleMs,
