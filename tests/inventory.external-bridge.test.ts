@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ItemRegistryContract } from '../src/shared/contracts/item-registry.contract'
 import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
 import { AccessPolicyContract } from '../src/shared/contracts/access-policy.contract'
@@ -12,6 +12,7 @@ import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
 import { InventoryEvents, configureInventoryEvents } from '../src/server/events/inventory-events'
+import * as inventoryEvents from '../src/server/events/inventory-events'
 import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
 import { InMemoryInventoryStore } from './in-memory.store'
@@ -78,8 +79,11 @@ describe('external bridge: changed seam', () => {
     vi.restoreAllMocks()
   })
 
-  it('emits nothing external when the bridge is off (the default)', async () => {
-    // No configure call — OFF is the default. A pure-core server must pay zero cross-resource cost.
+  it('builds no envelope and emits nothing external when the bridge is off (the default)', async () => {
+    // No configure call — OFF is the default. A pure-core server must pay zero cross-resource
+    // cost: the DTO is never built, not merely built-then-dropped. Spy on `toPublic` to assert
+    // the construction itself is skipped, and on `emitExternal` for the wire.
+    const toPublic = vi.spyOn(inventoryEvents, 'toPublic')
     const external = vi.spyOn(InventoryEvents, 'emitExternal').mockImplementation(() => {})
 
     const service = makeService()
@@ -87,6 +91,7 @@ describe('external bridge: changed seam', () => {
     await service.open('stash', id)
     await service.addItem(id, 'water', 3)
 
+    expect(toPublic).not.toHaveBeenCalled()
     expect(external).not.toHaveBeenCalled()
   })
 

@@ -1,4 +1,7 @@
 import { createServerLibrary } from '@open-core/framework/server'
+// Self-import so `toPublic`/`toPublicEvicted` are called through the module namespace, keeping
+// the DTO-build step interceptable in tests (asserts OFF builds no envelope).
+import * as self from './inventory-events'
 import {
   InventoryChangedEvent,
   InventoryEvictedEvent,
@@ -24,7 +27,7 @@ export function emitInventoryChanged(event: InventoryChangedEvent): void {
 
   if (!bridgeExternalEvents) return
 
-  InventoryEvents.emitExternal('changed', toPublic(event))
+  InventoryEvents.emitExternal('changed', self.toPublic(event))
 }
 
 /**
@@ -38,7 +41,7 @@ export function emitInventoryEvicted(event: InventoryEvictedEvent): void {
 
   if (!bridgeExternalEvents || event.type !== 'drop') return
 
-  InventoryEvents.emitExternal('evicted', toPublicEvicted(event))
+  InventoryEvents.emitExternal('evicted', self.toPublicEvicted(event))
 }
 
 /** Live internal event → frozen, serialisable public envelope. */
