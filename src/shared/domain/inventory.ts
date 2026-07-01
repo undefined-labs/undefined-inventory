@@ -3,6 +3,7 @@ import {
   Capacity,
   ItemDefinition,
   Meta,
+  MetaEnvelope,
   SerializedInventory,
   SerializedSlot,
   Slot,
@@ -217,7 +218,7 @@ export class Inventory {
   /** Matching slots sorted ascending by slot index. Returns live references. */
   private matchingSlots(itemName: ItemName, metadata?: Meta): Slot[] {
     return this.getItems()
-      .filter((slot) => slot.name === itemName && sameMeta(slot.metadata, metadata))
+      .filter((slot) => slot.name === itemName && sameStackKey(slot.metadata, metadata))
       .sort((a, b) => a.slot - b.slot)
   }
 }
@@ -272,7 +273,7 @@ export function moveItem(
   }
 
   // Same item + same meta + stackable → merge up to cap; remainder stays at source.
-  if (sourceDef.stack && target.name === source.name && sameMeta(target.metadata, source.metadata)) {
+  if (sourceDef.stack && target.name === source.name && sameStackKey(target.metadata, source.metadata)) {
     const cap = sourceDef.maxStack ?? Infinity
     const moved = Math.min(count, cap - target.count)
     guardTargetWeight(sourceDef.weight * moved)
@@ -291,6 +292,28 @@ export function moveItem(
   to.setSlot(toSlot, sourceDef, source.count, source.metadata)
   from.setSlot(fromSlot, targetDef, target.count, target.metadata)
   return { fromChanged: fromSlot, toChanged: toSlot }
+}
+
+/**
+ * The default `stackKey` projection: the metadata envelope minus its non-identity channels
+ * (`overrides`, `extra`). Everything left is identity, so a new top-level field is included
+ * automatically and an override/extra addition is excluded automatically. Empty projections
+ * collapse to `undefined` so a bag holding only reserved channels matches a bare item.
+ */
+function stackIdentity(meta?: Meta): Meta | undefined {
+  if (!meta) return undefined
+  const { overrides, extra, ...identity } = meta as MetaEnvelope & Meta
+  return Object.keys(identity).length > 0 ? identity : undefined
+}
+
+/**
+ * Stacking-identity equality — the decided default `stackKey`. Amends (does not replace) the
+ * `sameMeta` rule: two stacks share identity when their envelope projections deep-equal, so a
+ * stray `overrides`/`extra` field never fragments a stack. A kind may later substitute a
+ * narrower projection, which then owns identity-completeness (the merge-loss footgun).
+ */
+export function sameStackKey(a?: Meta, b?: Meta): boolean {
+  return sameMeta(stackIdentity(a), stackIdentity(b))
 }
 
 /** Order-independent, deep metadata equality. */

@@ -147,6 +147,54 @@ describe('sameMeta (order-independent deep equality)', () => {
   })
 })
 
+describe('stackKey default (envelope − overrides − extra)', () => {
+  test('identical identity metadata stacks', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3, { quality: 'clean' })
+    inv.addItem(water, 2, { quality: 'clean' })
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(5)
+  })
+
+  test('differing only in overrides still stacks', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3, { quality: 'clean', overrides: { label: 'Spring Water' } })
+    inv.addItem(water, 2, { quality: 'clean', overrides: { label: 'Tap Water', weight: 400 } })
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(5)
+  })
+
+  test('differing only in extra still stacks', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3, { quality: 'clean', extra: { foo: 1 } })
+    inv.addItem(water, 2, { quality: 'clean', extra: { bar: { deep: true } } })
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(5)
+  })
+
+  test('a bag holding only reserved channels stacks with a bare item', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3)
+    inv.addItem(water, 2, { overrides: { label: 'X' }, extra: { n: 1 } })
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(5)
+  })
+
+  test('differing in an identity field does not stack', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3, { serial: 'A', overrides: { label: 'X' } })
+    inv.addItem(water, 2, { serial: 'B', overrides: { label: 'X' } })
+    expect(inv.getItems()).toHaveLength(2)
+  })
+
+  test('a new identity field is projected automatically (not stacked)', () => {
+    const inv = makeInventory()
+    inv.addItem(water, 3, { owner: 'alice' })
+    inv.addItem(water, 2, { owner: 'bob' })
+    expect(inv.getItems()).toHaveLength(2)
+  })
+})
+
 describe('serialize → from (thin round-trip)', () => {
   test('round-trips the thin shape: { id, type, items }, no capacity, empty meta omitted', () => {
     const inv = makeInventory()
