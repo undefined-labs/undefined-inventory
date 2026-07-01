@@ -48,6 +48,17 @@ export type WeaponMeta = MetaEnvelope & {
   durabilityAt?: number
 }
 
+/**
+ * Container metadata: a minted `uid` referencing the container's own inventory row
+ * (`container:<uid>`) and the `size` read from the definition. Contents live in that row, never
+ * nested here — the item carries only the reference. `uid` is the sole identity field and each
+ * instance mints a fresh one, so the kind's `stackKey` keeps every container in its own slot.
+ */
+export type ContainerMeta = MetaEnvelope & {
+  uid: string
+  size: number
+}
+
 /** Static item template (ox data/items.lua). */
 export interface ItemDefinition {
   name: ItemName

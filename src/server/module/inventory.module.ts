@@ -20,6 +20,7 @@ import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry, ItemBehaviorHandler } from '../registry/item-behavior.registry'
 import { MetadataFactory, MetadataFactoryRegistry } from '../registry/metadata-factory.registry'
 import { createWeaponFactory } from '../registry/weapon.factory'
+import { createContainerFactory } from '../registry/container.factory'
 import { ItemKind } from '../../shared/types/item-name'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { InventoryService } from '../services/inventory.service'
@@ -133,6 +134,7 @@ export class InventoryModule {
         registry: container.resolve(ItemRegistryContract as never) as ItemRegistryContract,
       }),
     )
+    container.resolve(MetadataFactoryRegistry).register('container', createContainerFactory())
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
     // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
     // with the event bus rather than auto-resolved.
