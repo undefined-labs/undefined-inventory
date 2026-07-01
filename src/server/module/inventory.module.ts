@@ -174,8 +174,13 @@ export class InventoryModule {
     this.container().resolve(ItemBehaviorRegistry).register(itemName, handler)
   }
 
-  /** Register a per-kind metadata factory. Double-registering one kind throws. */
-  static registerMetadataFactory(kind: ItemKind, factory: MetadataFactory): void {
+  /**
+   * Register a per-kind metadata factory from outside core — the seam an external resource uses to
+   * add a kind (`garbage`/`identification`) without a core edit. Accepts a factory over the kind's
+   * own envelope type (`<any>`, like the internal registry), so the caller keeps its narrow `M`.
+   * Double-registering one kind throws.
+   */
+  static registerMetadataFactory(kind: ItemKind, factory: MetadataFactory<any>): void {
     this.container().resolve(MetadataFactoryRegistry).register(kind, factory)
   }
 

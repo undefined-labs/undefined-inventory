@@ -10,8 +10,14 @@ declare const brand: unique symbol
  */
 export type ItemName = string & { readonly [brand]: 'ItemName' }
 
-/** The single item discriminant; `baseItem` is the plain default (and factory-dispatch fallback). */
-export type ItemKind = 'baseItem' | 'weapon' | 'container'
+/**
+ * The item discriminant. The named arms are core kinds (`baseItem` is the plain default and
+ * factory-dispatch fallback); the `(string & {})` arm is the seam — an external resource registers
+ * its own kind string (e.g. `garbage`, `identification`) without a core edit, while the literals
+ * still autocomplete. Widening the union once here enables every external kind; naming a specific
+ * kind never touches core.
+ */
+export type ItemKind = 'baseItem' | 'weapon' | 'container' | (string & {})
 
 /**
  * Canonicalise a raw name into an {@link ItemName} at an ingress boundary. Trims, case-folds to
