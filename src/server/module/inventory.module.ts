@@ -19,6 +19,7 @@ import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-cap
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry, ItemBehaviorHandler } from '../registry/item-behavior.registry'
 import { MetadataFactory, MetadataFactoryRegistry } from '../registry/metadata-factory.registry'
+import { createWeaponFactory } from '../registry/weapon.factory'
 import { ItemKind } from '../../shared/types/item-name'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { InventoryService } from '../services/inventory.service'
@@ -124,6 +125,14 @@ export class InventoryModule {
     container.registerSingleton(InventoryRegistry, InventoryRegistry)
     container.registerSingleton(ItemBehaviorRegistry, ItemBehaviorRegistry)
     container.registerSingleton(MetadataFactoryRegistry, MetadataFactoryRegistry)
+    // Core kinds register here — weapon closes over the item registry so its `validate` can prune
+    // dangling component refs. `garbage`/`identification` stay external (the seam), never core.
+    container.resolve(MetadataFactoryRegistry).register(
+      'weapon',
+      createWeaponFactory({
+        registry: container.resolve(ItemRegistryContract as never) as ItemRegistryContract,
+      }),
+    )
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
     // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
     // with the event bus rather than auto-resolved.

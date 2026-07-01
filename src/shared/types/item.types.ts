@@ -34,6 +34,20 @@ export interface MetaEnvelope {
  */
 export type BaseItemMeta = MetaEnvelope & Meta
 
+/**
+ * Weapon metadata: a serial (the identity-bearing field), lazily-decayed durability, loaded ammo,
+ * and attached component refs (canonical {@link ItemName} keys, pruned against the registry on
+ * load). `durabilityAt` is decay bookkeeping — the epoch-ms anchor the current durability was last
+ * computed at — kept out of stacking identity by the kind's narrowed `stackKey`.
+ */
+export type WeaponMeta = MetaEnvelope & {
+  serial: string
+  durability: number
+  ammo: number
+  components: ItemName[]
+  durabilityAt?: number
+}
+
 /** Static item template (ox data/items.lua). */
 export interface ItemDefinition {
   name: ItemName
@@ -62,6 +76,11 @@ export interface ItemDefinition {
    * the item is not usable.
    */
   consume?: number
+  /**
+   * Weapon-kind decay config: minutes for durability to fall from 100 to 0. Absent → the weapon
+   * never decays. Read only by the weapon factory's lazy `validate`; there is no background tick.
+   */
+  degrade?: number
 }
 
 /** A live stack occupying one slot. */

@@ -7,7 +7,7 @@ import { ItemKind } from '../../shared/types/item-name'
  * a kind supplies how its metadata is minted, repaired on load, and (optionally) projected to a
  * stacking identity. `M` is the kind's envelope type.
  */
-export interface MetadataFactory<M extends Meta = Meta> {
+export interface MetadataFactory<M extends object = Meta> {
   /** Mint fresh metadata for a new instance, seeding from any caller-supplied `input`. */
   create(def: ItemDefinition, input?: Partial<M>): M
   /** Load-time repair: prune stale fields and apply lazy decay, returning valid metadata. */
@@ -35,14 +35,16 @@ export const baseItemFactory: MetadataFactory = {
  * kind is a `register(kind, factory)` call, never a core edit.
  */
 export class MetadataFactoryRegistry {
-  private factories = new Map<ItemKind, MetadataFactory>()
+  // Heterogeneous by kind — each factory owns its own metadata type `M`, so the map is stored at
+  // `any` and dispatch hands the service a `MetadataFactory<Meta>` view.
+  private factories = new Map<ItemKind, MetadataFactory<any>>()
 
   constructor() {
     this.factories.set('baseItem', baseItemFactory)
   }
 
   /** Register the factory for a kind. Re-registering an occupied kind throws. */
-  register(kind: ItemKind, factory: MetadataFactory): void {
+  register(kind: ItemKind, factory: MetadataFactory<any>): void {
     if (this.factories.has(kind))
       throw new InventoryError(`kind '${kind}' already has a metadata factory`)
     this.factories.set(kind, factory)
