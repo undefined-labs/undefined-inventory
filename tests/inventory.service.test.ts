@@ -355,4 +355,27 @@ describe('factory stackKey override (consumed end-to-end)', () => {
 
     expect(inv.getItems()).toHaveLength(2)
   })
+
+  it('runs the kind factory validate on load (prunes stale metadata)', async () => {
+    const factories = new MetadataFactoryRegistry()
+    const pruning: MetadataFactory = {
+      create: (_def, input) => ({ ...input }),
+      validate: (meta) => {
+        const { dangling, ...kept } = meta as Record<string, unknown>
+        return kept
+      },
+    }
+    factories.register('weapon', pruning)
+
+    const store = new InMemoryInventoryStore()
+    const id = stashInventoryId('locker-3')
+    await store.saveMany([
+      { id, type: 'stash', items: [{ slot: 1, name: 'token', count: 1, metadata: { serial: 'A', dangling: true } }] },
+    ])
+
+    const { service } = makeService({ store, factories })
+    const inv = await service.open('stash', id)
+
+    expect(inv.getSlot(1)!.metadata).toEqual({ serial: 'A' })
+  })
 })

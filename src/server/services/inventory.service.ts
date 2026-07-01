@@ -17,7 +17,7 @@ import {
   InventoryChangedEvent,
   SlotChange,
 } from '../../shared/events/inventory-event.types'
-import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types/item.types'
+import { InventoryContext, ItemDefinition, Meta, SerializedInventory, Slot } from '../../shared/types/item.types'
 import { ItemName, asItemName } from '../../shared/types/item-name'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
@@ -95,7 +95,7 @@ export class InventoryService {
         ? { stackKeyOf: this.stackKeyOf }
         : { extraWeightOf: this.containerWeightOf, stackKeyOf: this.stackKeyOf }
     const inv = serialized
-      ? this.registry.from(serialized, capacity, options)
+      ? this.registry.from(this.validateOnLoad(serialized), capacity, options)
       : this.registry.create(type, id, capacity, options)
     this.registry.set(inv)
     // Seed the idle clock so a just-opened, never-mutated inventory isn't instantly
@@ -120,6 +120,24 @@ export class InventoryService {
     if (!def) return structuralStackKey(name, meta)
     const factory = this.factories.resolve(def)
     return factory.stackKey && meta ? factory.stackKey(meta) : structuralStackKey(name, meta)
+  }
+
+  /**
+   * Load-time repair: run every persisted slot's metadata through its kind factory's `validate`
+   * (prune stale refs, apply lazy decay) before the aggregate hydrates. A fully-pruned bag
+   * collapses to no metadata so it round-trips thin. An unknown item can't be dispatched, so its
+   * metadata is left untouched for the domain to canonicalise as-is.
+   */
+  private validateOnLoad(serialized: SerializedInventory): SerializedInventory {
+    const items = serialized.items.map((slot) => {
+      if (!slot.metadata) return slot
+      const def = this.items.get(asItemName(slot.name))
+      if (!def) return slot
+      const repaired = this.factories.resolve(def).validate(slot.metadata, def)
+      const meta = repaired && Object.keys(repaired).length > 0 ? repaired : undefined
+      return { ...slot, metadata: meta }
+    })
+    return { ...serialized, items }
   }
 
   private readonly containerWeightOf = (slot: Slot): number => {
