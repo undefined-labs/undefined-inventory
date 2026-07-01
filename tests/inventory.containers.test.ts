@@ -9,6 +9,7 @@ import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { playerInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
+import { MetadataFactoryRegistry } from '../src/server/registry/metadata-factory.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -76,6 +77,7 @@ function makeService(store = new InMemoryInventoryStore()): {
     new AllowGive(),
     new HookBus(),
     new ItemBehaviorRegistry(),
+    new MetadataFactoryRegistry(),
   )
   return { service, store, registry }
 }
@@ -179,6 +181,7 @@ describe('containers: weight rollup (depth 1)', () => {
       new AllowGive(),
       new HookBus(),
       new ItemBehaviorRegistry(),
+      new MetadataFactoryRegistry(),
     )
     const holder = playerInventoryId('dave')
     const inv = await service.open('player', holder)

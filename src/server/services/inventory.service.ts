@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe'
 import type { OpenCoreServerLibrary } from '@open-core/framework/server'
-import { Inventory, moveItem } from '../../shared/domain/inventory'
+import { Inventory, moveItem, structuralStackKey, StackKeyOf } from '../../shared/domain/inventory'
 import { AccessPolicyContract } from '../../shared/contracts/access-policy.contract'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
@@ -17,10 +17,11 @@ import {
   InventoryChangedEvent,
   SlotChange,
 } from '../../shared/events/inventory-event.types'
-import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types/item.types'
+import { InventoryContext, ItemDefinition, Meta, SerializedInventory, Slot } from '../../shared/types/item.types'
 import { ItemName, asItemName } from '../../shared/types/item-name'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
+import { MetadataFactoryRegistry } from '../registry/metadata-factory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { TouchTracker } from '../subscribers/touch-tracker'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
@@ -46,6 +47,7 @@ export class InventoryService {
     @inject(GiveAccessContract as never) private readonly giveAccess: GiveAccessContract,
     @inject(HookContract as never) private readonly hooks: HookContract,
     @inject(ItemBehaviorRegistry) private readonly behaviors: ItemBehaviorRegistry,
+    @inject(MetadataFactoryRegistry) private readonly factories: MetadataFactoryRegistry,
   ) {}
 
   /**
@@ -89,9 +91,11 @@ export class InventoryService {
     // A container is never itself a holder (depth 1), so only non-container inventories roll up
     // contained weight — this also stops the rollup from recursing past one level.
     const options =
-      type === 'container' ? undefined : { extraWeightOf: this.containerWeightOf }
+      type === 'container'
+        ? { stackKeyOf: this.stackKeyOf }
+        : { extraWeightOf: this.containerWeightOf, stackKeyOf: this.stackKeyOf }
     const inv = serialized
-      ? this.registry.from(serialized, capacity, options)
+      ? this.registry.from(this.validateOnLoad(serialized), capacity, options)
       : this.registry.create(type, id, capacity, options)
     this.registry.set(inv)
     // Seed the idle clock so a just-opened, never-mutated inventory isn't instantly
@@ -106,6 +110,36 @@ export class InventoryService {
    * currently open. An unopened container contributes nothing here — its weight only counts
    * once it (and thus its contents) is hydrated, matching ox's open-to-weigh behaviour.
    */
+  /**
+   * The stacking-identity projection handed to every aggregate: dispatch to the item's kind
+   * factory and use its `stackKey` override when present, else the structural envelope default.
+   * A missing def can't be projected by a factory, so it also falls back to structural.
+   */
+  private readonly stackKeyOf: StackKeyOf = (name, meta) => {
+    const def = this.items.get(name)
+    if (!def) return structuralStackKey(name, meta)
+    const factory = this.factories.resolve(def)
+    return factory.stackKey && meta ? factory.stackKey(meta) : structuralStackKey(name, meta)
+  }
+
+  /**
+   * Load-time repair: run every persisted slot's metadata through its kind factory's `validate`
+   * (prune stale refs, apply lazy decay) before the aggregate hydrates. A fully-pruned bag
+   * collapses to no metadata so it round-trips thin. An unknown item can't be dispatched, so its
+   * metadata is left untouched for the domain to canonicalise as-is.
+   */
+  private validateOnLoad(serialized: SerializedInventory): SerializedInventory {
+    const items = serialized.items.map((slot) => {
+      if (!slot.metadata) return slot
+      const def = this.items.get(asItemName(slot.name))
+      if (!def) return slot
+      const repaired = this.factories.resolve(def).validate(slot.metadata, def)
+      const meta = repaired && Object.keys(repaired).length > 0 ? repaired : undefined
+      return { ...slot, metadata: meta }
+    })
+    return { ...serialized, items }
+  }
+
   private readonly containerWeightOf = (slot: Slot): number => {
     const def = this.items.get(slot.name)
     const uid = slot.metadata?.uid as string | undefined
@@ -119,9 +153,17 @@ export class InventoryService {
     // Client→server command ingress: canonicalise the raw name once, then hold only the key.
     const name = asItemName(itemName)
     const def = this.requireItem(name)
+    // Mint fresh metadata through the kind's factory — core never names an item; a plain item
+    // routes through the `baseItem` passthrough. An empty bag collapses to undefined so a bare
+    // add stays byte-identical to a no-metadata add (stacking, thin persistence).
+    const created = this.factories.resolve(def).create(def, metadata)
     // A container item gets a freshly-minted uid so its contents row is keyed to THIS instance
     // alone — a brand-new bag can never alias a destroyed one's lingering row (the dupe guard).
-    const meta = def.container ? { ...metadata, uid: metadata?.uid ?? randomUUID() } : metadata
+    const meta = def.container
+      ? { ...created, uid: (created.uid as string | undefined) ?? randomUUID() }
+      : Object.keys(created).length > 0
+        ? created
+        : undefined
     await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta), {
       kind: 'add',
       item: name,
@@ -247,6 +289,7 @@ export class InventoryService {
         toSlot,
         count,
         (name) => this.requireItem(name),
+        this.stackKeyOf,
       )
 
       this.emitChanged(from, [fromChanged], 'move')

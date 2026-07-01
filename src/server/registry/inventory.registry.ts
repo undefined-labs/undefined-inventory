@@ -1,10 +1,12 @@
-import { Inventory } from '../../shared/domain/inventory'
+import { Inventory, StackKeyOf } from '../../shared/domain/inventory'
 import { Capacity, SerializedInventory, Slot } from '../../shared/types/item.types'
 
 /** Per-instance hydrate options threaded from the service (e.g. container weight rollup). */
 export interface HydrateOptions {
   ephemeral?: boolean
   extraWeightOf?: (slot: Slot) => number
+  /** Per-kind stacking-identity projection, so a narrowed factory `stackKey` reaches the aggregate. */
+  stackKeyOf?: StackKeyOf
 }
 
 /**

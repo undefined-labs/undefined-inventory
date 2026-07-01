@@ -195,6 +195,30 @@ describe('stackKey default (envelope − overrides − extra)', () => {
   })
 })
 
+describe('stackKey override (injected narrowed projection)', () => {
+  // A factory-style narrowed key: identity is `serial` alone, so a cosmetic field that the
+  // structural default would treat as identity no longer fragments the stack.
+  const bySerial = new Inventory('player:1', 'player', cap(5, 10000), [], {
+    stackKeyOf: (_name, meta) => (meta?.serial as string | undefined) ?? '',
+  })
+
+  test('the override narrows identity: cosmetic difference now stacks', () => {
+    bySerial.addItem(water, 3, { serial: 'A', tint: 'blue' })
+    bySerial.addItem(water, 2, { serial: 'A', tint: 'red' })
+    expect(bySerial.getItems()).toHaveLength(1)
+    expect(bySerial.getSlot(1)!.count).toBe(5)
+  })
+
+  test('the override still separates distinct identities', () => {
+    const inv = new Inventory('player:2', 'player', cap(5, 10000), [], {
+      stackKeyOf: (_name, meta) => (meta?.serial as string | undefined) ?? '',
+    })
+    inv.addItem(water, 3, { serial: 'A' })
+    inv.addItem(water, 2, { serial: 'B' })
+    expect(inv.getItems()).toHaveLength(2)
+  })
+})
+
 describe('serialize → from (thin round-trip)', () => {
   test('round-trips the thin shape: { id, type, items }, no capacity, empty meta omitted', () => {
     const inv = makeInventory()
