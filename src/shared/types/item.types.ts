@@ -6,6 +6,34 @@ import { ItemKind, ItemName } from './item-name'
 /** Arbitrary per-stack metadata — part of the merge key (order-independent compare). */
 export type Meta = Record<string, unknown>
 
+/**
+ * Definition-shadow channel: per-instance overrides of a definition's cosmetic/weight fields.
+ * Never identity — two stacks differing only here still stack (excluded from `stackKey`).
+ */
+export interface MetaOverrides {
+  weight?: number
+  label?: string
+  image?: string
+}
+
+/**
+ * The two reserved, non-identity channels shared by every kind's metadata envelope. Both are
+ * excluded from stacking identity by construction: `overrides` shadows the definition, `extra`
+ * is fenced open-ended modder data. Everything else in the bag is identity.
+ */
+export interface MetaEnvelope {
+  overrides?: MetaOverrides
+  /** Open-ended modder scratch. Never identity; a size/depth bound is owed at the client ingress. */
+  extra?: Record<string, unknown>
+}
+
+/**
+ * Plain-item metadata: the whole open bag is identity, plus the reserved envelope channels.
+ * The default `stackKey` (envelope − `overrides` − `extra`) makes any new identity field count
+ * automatically, while override/extra additions never fragment a stack.
+ */
+export type BaseItemMeta = MetaEnvelope & Meta
+
 /** Static item template (ox data/items.lua). */
 export interface ItemDefinition {
   name: ItemName

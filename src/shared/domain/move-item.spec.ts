@@ -102,6 +102,17 @@ describe('moveItem — swap (target holds a different item)', () => {
     expect(a.getSlot(1)).toMatchObject({ count: 5, metadata: { q: 'dirty' } })
     expect(a.getSlot(2)).toMatchObject({ count: 2, metadata: { q: 'clean' } })
   })
+
+  test('merges (not swaps) when stacks differ only in non-identity channels', () => {
+    const a = inv()
+    a.setSlot(1, water, 2, { q: 'clean', overrides: { label: 'X' } })
+    a.setSlot(2, water, 3, { q: 'clean', extra: { n: 1 } })
+
+    moveItem(a, a, 1, 2, 2, defOf)
+
+    expect(a.getSlot(2)).toMatchObject({ name: 'water', count: 5 })
+    expect(a.getSlot(1)).toBeNull()
+  })
 })
 
 describe('moveItem — atomic rejection of a partial swap', () => {
