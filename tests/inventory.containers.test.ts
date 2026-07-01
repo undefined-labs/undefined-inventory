@@ -5,6 +5,7 @@ import { AccessPolicyContract } from '../src/shared/contracts/access-policy.cont
 import { GiveAccessContract } from '../src/shared/contracts/give-access.contract'
 import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
+import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { playerInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
@@ -17,13 +18,13 @@ import { InventoryService } from '../src/server/services/inventory.service'
 import { InMemoryInventoryStore } from './in-memory.store'
 
 const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
+  water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
   // A bag: a container-backing item. Non-stackable; holds its contents in an own row.
-  bag: { name: 'bag', label: 'Bag', weight: 500, stack: false, container: { size: 10 } },
+  bag: { name: asItemName('bag'), label: 'Bag', weight: 500, stack: false, container: { size: 10 } },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
+  get(name: ItemName): ItemDefinition | null {
     return ITEMS[name] ?? null
   }
 }
@@ -132,7 +133,7 @@ describe('containers: own-row hydrate + persistence', () => {
     await reopened.service.open('player', holder) // holder need not be persisted for this
     const uid = containerId.slice('container:'.length)
     const rehydrated = await reopened.service.open('container', containerId, { size: 10 })
-    expect(rehydrated.countItem('water')).toBe(4)
+    expect(rehydrated.countItem(asItemName('water'))).toBe(4)
     expect(uid.length).toBeGreaterThan(0)
   })
 })
@@ -187,7 +188,7 @@ describe('containers: weight rollup (depth 1)', () => {
 
     // Adding directly to the holder would push past 600 once the bag's rolled-up weight counts.
     await expect(service.addItem(holder, 'water', 1)).rejects.toThrow()
-    expect(inv.countItem('water')).toBe(0)
+    expect(inv.countItem(asItemName('water'))).toBe(0)
   })
 })
 

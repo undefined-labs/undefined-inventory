@@ -5,6 +5,7 @@ import { AccessPolicyContract } from '../src/shared/contracts/access-policy.cont
 import { GiveAccessContract } from '../src/shared/contracts/give-access.contract'
 import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
+import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
@@ -18,12 +19,12 @@ import { InventoryService } from '../src/server/services/inventory.service'
 import { InMemoryInventoryStore } from './in-memory.store'
 
 const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
-  phone: { name: 'phone', label: 'Phone', weight: 200, stack: false },
+  water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
+  phone: { name: asItemName('phone'), label: 'Phone', weight: 200, stack: false },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
+  get(name: ItemName): ItemDefinition | null {
     return ITEMS[name] ?? null
   }
 }
@@ -125,7 +126,7 @@ describe('InventoryService.open', () => {
 
     expect(reopened.slots).toBe(20)
     expect(reopened.maxWeight).toBe(9000)
-    expect(reopened.countItem('water')).toBe(1)
+    expect(reopened.countItem(asItemName('water'))).toBe(1)
   })
 })
 
@@ -142,7 +143,7 @@ describe('InventoryService mutations', () => {
     await service.addItem(id, 'water', 3)
     InventoryEvents.off('changed', handler)
 
-    expect(inv.countItem('water')).toBe(3)
+    expect(inv.countItem(asItemName('water'))).toBe(3)
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ inventoryId: id, type: 'stash', reason: 'add' })
     expect(events[0]!.changes).toEqual([{ slot: 1, item: expect.objectContaining({ name: 'water', count: 3 }) }])
@@ -162,7 +163,7 @@ describe('InventoryService mutations', () => {
     await service.removeItem(id, 'water', 2)
     InventoryEvents.off('changed', handler)
 
-    expect(inv.countItem('water')).toBe(0)
+    expect(inv.countItem(asItemName('water'))).toBe(0)
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ reason: 'remove' })
     expect(events[0]!.changes).toEqual([{ slot: 1, item: null }])
@@ -194,12 +195,12 @@ describe('InventoryService mutations', () => {
     // Simulate a mutation in flight holding the lock across its awaits.
     expect(lock.acquire(id)).toBe(true)
     await expect(service.addItem(id, 'water', 1)).rejects.toThrow()
-    expect(inv.countItem('water')).toBe(0)
+    expect(inv.countItem(asItemName('water'))).toBe(0)
 
     // Once released, the same mutation succeeds.
     lock.release(id)
     await service.addItem(id, 'water', 1)
-    expect(inv.countItem('water')).toBe(1)
+    expect(inv.countItem(asItemName('water'))).toBe(1)
   })
 })
 

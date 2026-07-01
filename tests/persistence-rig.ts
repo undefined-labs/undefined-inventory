@@ -2,6 +2,7 @@ import { ItemRegistryContract } from '../src/shared/contracts/item-registry.cont
 import { CapacityPolicyContract } from '../src/shared/contracts/capacity-policy.contract'
 import { InventoryStoreContract } from '../src/shared/contracts/inventory-store.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
+import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
@@ -17,11 +18,11 @@ import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
 
 export const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
+  water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
 }
 
 export class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
+  get(name: ItemName): ItemDefinition | null {
     return ITEMS[name] ?? null
   }
 }

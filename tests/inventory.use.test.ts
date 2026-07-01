@@ -5,6 +5,7 @@ import { AccessPolicyContract } from '../src/shared/contracts/access-policy.cont
 import { GiveAccessContract } from '../src/shared/contracts/give-access.contract'
 import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
+import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { SlotChange } from '../src/shared/events/inventory-event.types'
 import { playerInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
@@ -18,13 +19,13 @@ import { InMemoryInventoryStore } from './in-memory.store'
 import { HookBus } from '../src/server/policies/hook-bus'
 
 const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
+  water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
   // A bandage consumes one unit per use and carries a server-defined effect.
-  bandage: { name: 'bandage', label: 'Bandage', weight: 50, stack: true, consume: 1 },
+  bandage: { name: asItemName('bandage'), label: 'Bandage', weight: 50, stack: true, consume: 1 },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
+  get(name: ItemName): ItemDefinition | null {
     return ITEMS[name] ?? null
   }
 }
@@ -127,7 +128,7 @@ describe('use: consume-first-then-effect', () => {
     const actor = 9
     await service.open('player', id, undefined, actor)
     // consume is 1 here; use a multi-consume item to force the not-enough path.
-    ITEMS.medkit = { name: 'medkit', label: 'Medkit', weight: 200, stack: true, consume: 5 }
+    ITEMS.medkit = { name: asItemName('medkit'), label: 'Medkit', weight: 200, stack: true, consume: 5 }
     await service.addItem(id, 'medkit', 2)
 
     let effectRan = false

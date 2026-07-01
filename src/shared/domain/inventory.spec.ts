@@ -1,8 +1,9 @@
 import { Inventory, sameMeta } from './inventory'
 import { Capacity, ItemDefinition } from '../types/item.types'
+import { asItemName } from '../types/item-name'
 
-const water: ItemDefinition = { name: 'water', label: 'Water', weight: 500, stack: true }
-const phone: ItemDefinition = { name: 'phone', label: 'Phone', weight: 1000, stack: false }
+const water: ItemDefinition = { name: asItemName('water'), label: 'Water', weight: 500, stack: true }
+const phone: ItemDefinition = { name: asItemName('phone'), label: 'Phone', weight: 1000, stack: false }
 
 const cap = (slots: number, maxWeight: number): Capacity => ({ slots, maxWeight })
 
@@ -46,7 +47,7 @@ describe('Inventory.addItem (pure domain)', () => {
 
 describe('Inventory stack caps (maxStack: merge to cap, spill to next empty)', () => {
   const ammo: ItemDefinition = {
-    name: 'ammo',
+    name: asItemName('ammo'),
     label: 'Ammo',
     weight: 1,
     stack: true,
@@ -179,7 +180,7 @@ describe('serialize → from (thin round-trip)', () => {
 
 describe('lenient rehydrate (grandfather-and-decay: over-cap stack loads, never grows, draws down)', () => {
   const ammo: ItemDefinition = {
-    name: 'ammo',
+    name: asItemName('ammo'),
     label: 'Ammo',
     weight: 1,
     stack: true,
