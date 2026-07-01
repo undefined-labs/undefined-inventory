@@ -18,6 +18,8 @@ import { ProximityGivePolicy } from '../policies/proximity-give.policy'
 import { TypeMapCapacityPolicy, TypeCapacityMap } from '../policies/type-map-capacity.policy'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry, ItemBehaviorHandler } from '../registry/item-behavior.registry'
+import { MetadataFactory, MetadataFactoryRegistry } from '../registry/metadata-factory.registry'
+import { ItemKind } from '../../shared/types/item-name'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { InventoryService } from '../services/inventory.service'
 import { DirtySet } from '../subscribers/dirty-set'
@@ -121,6 +123,7 @@ export class InventoryModule {
     container.register(INVENTORY_EVENTS, { useValue: InventoryEvents })
     container.registerSingleton(InventoryRegistry, InventoryRegistry)
     container.registerSingleton(ItemBehaviorRegistry, ItemBehaviorRegistry)
+    container.registerSingleton(MetadataFactoryRegistry, MetadataFactoryRegistry)
     container.registerSingleton(ViewerRegistry, ViewerRegistry)
     // TouchTracker subscribes to `inventory:changed` to stamp idle time, so it's constructed
     // with the event bus rather than auto-resolved.
@@ -158,6 +161,11 @@ export class InventoryModule {
   /** Register a server-defined use-effect for an item. Double-registering one item throws. */
   static registerItemBehavior(itemName: string, handler: ItemBehaviorHandler): void {
     this.container().resolve(ItemBehaviorRegistry).register(itemName, handler)
+  }
+
+  /** Register a per-kind metadata factory. Double-registering one kind throws. */
+  static registerMetadataFactory(kind: ItemKind, factory: MetadataFactory): void {
+    this.container().resolve(MetadataFactoryRegistry).register(kind, factory)
   }
 
   static resolveService(): InventoryService {

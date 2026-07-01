@@ -9,6 +9,7 @@ import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
+import { MetadataFactoryRegistry } from '../src/server/registry/metadata-factory.registry'
 import { ViewerRegistry } from '../src/server/registry/viewer.registry'
 import { InMemoryInventoryLock } from '../src/server/policies/in-memory-lock'
 import { HookBus } from '../src/server/policies/hook-bus'
@@ -66,6 +67,7 @@ function makeService(): InventoryService {
     new AllowGive(),
     new HookBus(),
     new ItemBehaviorRegistry(),
+    new MetadataFactoryRegistry(),
   )
 }
 

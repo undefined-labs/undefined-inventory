@@ -15,6 +15,7 @@ import { InventoryEvents } from '../src/server/events/inventory-events'
 import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
+import { MetadataFactoryRegistry } from '../src/server/registry/metadata-factory.registry'
 import { InMemoryInventoryStore } from './in-memory.store'
 import { HookBus } from '../src/server/policies/hook-bus'
 
@@ -74,6 +75,7 @@ function makeService(hooks = new HookBus(), behaviors = new ItemBehaviorRegistry
     new AllowGive(),
     hooks,
     behaviors,
+    new MetadataFactoryRegistry(),
   )
   return { service, hooks, behaviors, sync }
 }

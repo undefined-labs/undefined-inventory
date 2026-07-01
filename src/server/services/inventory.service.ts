@@ -21,6 +21,7 @@ import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types
 import { ItemName, asItemName } from '../../shared/types/item-name'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
+import { MetadataFactoryRegistry } from '../registry/metadata-factory.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
 import { TouchTracker } from '../subscribers/touch-tracker'
 import { INVENTORY_EVENTS } from '../events/inventory-events.token'
@@ -46,6 +47,7 @@ export class InventoryService {
     @inject(GiveAccessContract as never) private readonly giveAccess: GiveAccessContract,
     @inject(HookContract as never) private readonly hooks: HookContract,
     @inject(ItemBehaviorRegistry) private readonly behaviors: ItemBehaviorRegistry,
+    @inject(MetadataFactoryRegistry) private readonly factories: MetadataFactoryRegistry,
   ) {}
 
   /**
@@ -119,9 +121,17 @@ export class InventoryService {
     // Client→server command ingress: canonicalise the raw name once, then hold only the key.
     const name = asItemName(itemName)
     const def = this.requireItem(name)
+    // Mint fresh metadata through the kind's factory — core never names an item; a plain item
+    // routes through the `baseItem` passthrough. An empty bag collapses to undefined so a bare
+    // add stays byte-identical to a no-metadata add (stacking, thin persistence).
+    const created = this.factories.resolve(def).create(def, metadata)
     // A container item gets a freshly-minted uid so its contents row is keyed to THIS instance
     // alone — a brand-new bag can never alias a destroyed one's lingering row (the dupe guard).
-    const meta = def.container ? { ...metadata, uid: metadata?.uid ?? randomUUID() } : metadata
+    const meta = def.container
+      ? { ...created, uid: (created.uid as string | undefined) ?? randomUUID() }
+      : Object.keys(created).length > 0
+        ? created
+        : undefined
     await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta), {
       kind: 'add',
       item: name,
