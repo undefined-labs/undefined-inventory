@@ -5,6 +5,7 @@ import { AccessPolicyContract } from '../src/shared/contracts/access-policy.cont
 import { GiveAccessContract } from '../src/shared/contracts/give-access.contract'
 import { InventorySyncContract } from '../src/shared/contracts/inventory-sync.contract'
 import { ItemDefinition } from '../src/shared/types/item.types'
+import { ItemName, asItemName } from '../src/shared/types/item-name'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InventoryRegistry } from '../src/server/registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../src/server/registry/item-behavior.registry'
@@ -18,11 +19,11 @@ import { InventoryService } from '../src/server/services/inventory.service'
 import { InMemoryInventoryStore } from './in-memory.store'
 
 const ITEMS: Record<string, ItemDefinition> = {
-  water: { name: 'water', label: 'Water', weight: 100, stack: true },
+  water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
-  get(name: string): ItemDefinition | null {
+  get(name: ItemName): ItemDefinition | null {
     return ITEMS[name] ?? null
   }
 }

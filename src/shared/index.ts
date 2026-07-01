@@ -1,5 +1,6 @@
 export * from './errors'
 export * from './types/item.types'
+export * from './types/item-name'
 export * from './domain/inventory'
 export * from './events/inventory-event.types'
 export * from './contracts/inventory-store.contract'

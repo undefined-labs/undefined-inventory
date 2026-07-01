@@ -7,6 +7,7 @@ import {
   SerializedSlot,
   Slot,
 } from '../types/item.types'
+import { ItemName, asItemName } from '../types/item-name'
 
 /**
  * Inventory aggregate root. Pure: no framework imports, no I/O, no events.
@@ -49,7 +50,9 @@ export class Inventory {
     for (const slot of items) {
       this.items.set(slot.slot, {
         slot: slot.slot,
-        name: slot.name,
+        // Store→domain ingress: canonicalise a persisted (possibly legacy-lowercase) name once,
+        // so every later slot compare and registry lookup is against a canonical key.
+        name: asItemName(slot.name),
         count: slot.count,
         // recomputed on the next add/remove from the item def's per-unit weight
         weight: 0,
@@ -121,7 +124,7 @@ export class Inventory {
   }
 
   /** Total units of an item across all matching slots. */
-  countItem(itemName: string, metadata?: Meta): number {
+  countItem(itemName: ItemName, metadata?: Meta): number {
     let total = 0
     for (const slot of this.matchingSlots(itemName, metadata)) total += slot.count
     return total
@@ -212,7 +215,7 @@ export class Inventory {
   }
 
   /** Matching slots sorted ascending by slot index. Returns live references. */
-  private matchingSlots(itemName: string, metadata?: Meta): Slot[] {
+  private matchingSlots(itemName: ItemName, metadata?: Meta): Slot[] {
     return this.getItems()
       .filter((slot) => slot.name === itemName && sameMeta(slot.metadata, metadata))
       .sort((a, b) => a.slot - b.slot)
@@ -235,7 +238,7 @@ export function moveItem(
   fromSlot: number,
   toSlot: number,
   count: number,
-  defOf: (name: string) => ItemDefinition,
+  defOf: (name: ItemName) => ItemDefinition,
 ): MoveResult {
   // A no-op self-move would have the merge/swap branches write the same slot twice and lose
   // units, so reject it before reading the source.

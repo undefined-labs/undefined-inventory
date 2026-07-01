@@ -18,6 +18,7 @@ import {
   SlotChange,
 } from '../../shared/events/inventory-event.types'
 import { InventoryContext, ItemDefinition, Meta, Slot } from '../../shared/types/item.types'
+import { ItemName, asItemName } from '../../shared/types/item-name'
 import { InventoryRegistry } from '../registry/inventory.registry'
 import { ItemBehaviorRegistry } from '../registry/item-behavior.registry'
 import { ViewerRegistry } from '../registry/viewer.registry'
@@ -115,13 +116,15 @@ export class InventoryService {
 
   /** Add `count` of an item to an open inventory. Emits `inventory:changed`. */
   async addItem(id: string, itemName: string, count: number, metadata?: Meta): Promise<void> {
-    const def = this.requireItem(itemName)
+    // Client→server command ingress: canonicalise the raw name once, then hold only the key.
+    const name = asItemName(itemName)
+    const def = this.requireItem(name)
     // A container item gets a freshly-minted uid so its contents row is keyed to THIS instance
     // alone — a brand-new bag can never alias a destroyed one's lingering row (the dupe guard).
     const meta = def.container ? { ...metadata, uid: metadata?.uid ?? randomUUID() } : metadata
     await this.mutate(id, 'add', (inv) => inv.addItem(def, count, meta), {
       kind: 'add',
-      item: itemName,
+      item: name,
       count,
       metadata: meta,
     })
@@ -155,10 +158,11 @@ export class InventoryService {
 
   /** Remove `count` of an item from an open inventory. Emits `inventory:changed`. */
   async removeItem(id: string, itemName: string, count: number, metadata?: Meta): Promise<void> {
-    const def = this.requireItem(itemName)
+    const name = asItemName(itemName)
+    const def = this.requireItem(name)
     await this.mutate(id, 'remove', (inv) => inv.removeItem(def, count, metadata), {
       kind: 'remove',
-      item: itemName,
+      item: name,
       count,
       metadata,
     })
@@ -429,7 +433,7 @@ export class InventoryService {
     return inv
   }
 
-  private requireItem(name: string): ItemDefinition {
+  private requireItem(name: ItemName): ItemDefinition {
     const def = this.items.get(name)
     if (!def) throw new InventoryError(`unknown item '${name}'`)
     return def

@@ -1,18 +1,19 @@
 import { Inventory, moveItem } from './inventory'
 import { Capacity, ItemDefinition } from '../types/item.types'
+import { ItemName, asItemName } from '../types/item-name'
 
-const water: ItemDefinition = { name: 'water', label: 'Water', weight: 100, stack: true }
+const water: ItemDefinition = { name: asItemName('water'), label: 'Water', weight: 100, stack: true }
 const ammo: ItemDefinition = {
-  name: 'ammo',
+  name: asItemName('ammo'),
   label: 'Ammo',
   weight: 10,
   stack: true,
   maxStack: 10,
 }
-const phone: ItemDefinition = { name: 'phone', label: 'Phone', weight: 200, stack: false }
+const phone: ItemDefinition = { name: asItemName('phone'), label: 'Phone', weight: 200, stack: false }
 
 const DEFS: Record<string, ItemDefinition> = { water, ammo, phone }
-const defOf = (name: string): ItemDefinition => DEFS[name]!
+const defOf = (name: ItemName): ItemDefinition => DEFS[name]!
 
 const cap = (slots: number, maxWeight: number): Capacity => ({ slots, maxWeight })
 const inv = (slots = 5, maxWeight = 1_000_000) =>

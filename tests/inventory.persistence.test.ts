@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { stashInventoryId } from '../src/shared/utils/inventory-id'
 import { InMemoryInventoryStore } from './in-memory.store'
 import { makeRig } from './persistence-rig'
+import { asItemName } from '../src/shared/types/item-name'
 
 describe('inventory persistence (write-behind)', () => {
   it('does NOT write to the store on each mutation', async () => {
@@ -59,7 +60,7 @@ describe('inventory persistence (write-behind)', () => {
     // Restart: brand-new registry + service over the SAME store. Items must be intact.
     const second = makeRig(store)
     const reopened = await second.service.open('stash', id)
-    expect(reopened.countItem('water')).toBe(5)
+    expect(reopened.countItem(asItemName('water'))).toBe(5)
 
     second.dirty.dispose()
     second.scheduler.dispose()
