@@ -12,6 +12,13 @@ import { InMemoryInventoryStore } from './in-memory.store'
 
 const ITEMS: Record<string, ItemDefinition> = {
   water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
+  WEAPON_PISTOL: {
+    name: asItemName('weapon_pistol'),
+    kind: 'weapon',
+    label: 'Pistol',
+    weight: 1000,
+    stack: false,
+  },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
@@ -48,6 +55,22 @@ describe('inventoryServerPlugin', () => {
     expect(stored!.items).toEqual<SerializedInventory['items']>([
       { slot: 1, name: 'water', count: 4 },
     ])
+  })
+
+  it('registers the weapon kind as a core factory — a fresh weapon mints a serial', async () => {
+    const store = new InMemoryInventoryStore()
+    const plugin = inventoryServerPlugin({ store, items: new StaticItemRegistry() })
+    await plugin.install()
+
+    const service = InventoryModule.resolveService()
+    const id = stashInventoryId('locker-1')
+    await service.open('stash', id)
+    await service.addItem(id, 'WEAPON_PISTOL', 1)
+    await plugin.stop?.()
+
+    const slot = (await store.load(id))!.items.find((s) => s.name === 'WEAPON_PISTOL')!
+    expect(slot.metadata).toMatchObject({ ammo: 0, durability: 100, components: [] })
+    expect(typeof slot.metadata!.serial).toBe('string')
   })
 
   it('throws when the required store port is missing', () => {
