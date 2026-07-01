@@ -33,6 +33,12 @@ export class Inventory {
    * never a registry. Defaults to zero contribution (a plain inventory).
    */
   private readonly extraWeightOf: (slot: Slot) => number
+  /**
+   * Projects a slot's metadata to its stacking identity. Injected by the service (which alone
+   * reaches the per-kind factory registry), so the pure aggregate stays registry-free: it calls
+   * a supplied projection. Defaults to the structural envelope key — the safe whole-bag rule.
+   */
+  private readonly stackKeyOf: StackKeyOf
   private items = new Map<number, Slot>()
 
   constructor(
@@ -40,7 +46,7 @@ export class Inventory {
     type: string,
     capacity: Capacity,
     items: SerializedSlot[] = [],
-    options?: { ephemeral?: boolean; extraWeightOf?: (slot: Slot) => number },
+    options?: { ephemeral?: boolean; extraWeightOf?: (slot: Slot) => number; stackKeyOf?: StackKeyOf },
   ) {
     this.id = id
     this.type = type
@@ -48,6 +54,7 @@ export class Inventory {
     this.maxWeight = capacity.maxWeight
     this.ephemeral = options?.ephemeral ?? false
     this.extraWeightOf = options?.extraWeightOf ?? (() => 0)
+    this.stackKeyOf = options?.stackKeyOf ?? structuralStackKey
     for (const slot of items) {
       this.items.set(slot.slot, {
         slot: slot.slot,
@@ -217,8 +224,9 @@ export class Inventory {
 
   /** Matching slots sorted ascending by slot index. Returns live references. */
   private matchingSlots(itemName: ItemName, metadata?: Meta): Slot[] {
+    const key = this.stackKeyOf(itemName, metadata)
     return this.getItems()
-      .filter((slot) => slot.name === itemName && sameStackKey(slot.metadata, metadata))
+      .filter((slot) => slot.name === itemName && sameIdentity(this.stackKeyOf(itemName, slot.metadata), key))
       .sort((a, b) => a.slot - b.slot)
   }
 }
@@ -240,6 +248,7 @@ export function moveItem(
   toSlot: number,
   count: number,
   defOf: (name: ItemName) => ItemDefinition,
+  stackKeyOf: StackKeyOf = structuralStackKey,
 ): MoveResult {
   // A no-op self-move would have the merge/swap branches write the same slot twice and lose
   // units, so reject it before reading the source.
@@ -273,7 +282,11 @@ export function moveItem(
   }
 
   // Same item + same meta + stackable → merge up to cap; remainder stays at source.
-  if (sourceDef.stack && target.name === source.name && sameStackKey(target.metadata, source.metadata)) {
+  if (
+    sourceDef.stack &&
+    target.name === source.name &&
+    sameIdentity(stackKeyOf(source.name, target.metadata), stackKeyOf(source.name, source.metadata))
+  ) {
     const cap = sourceDef.maxStack ?? Infinity
     const moved = Math.min(count, cap - target.count)
     guardTargetWeight(sourceDef.weight * moved)
@@ -295,22 +308,38 @@ export function moveItem(
 }
 
 /**
+ * Projects a slot's metadata to its stacking identity. The domain compares two slots by the
+ * equality of their projections, so a kind can narrow identity by supplying its own projection
+ * (a factory's `stackKey`) without the aggregate knowing the kind. The default is structural.
+ */
+export type StackKeyOf = (name: ItemName, meta?: Meta) => unknown
+
+/**
  * The default `stackKey` projection: the metadata envelope minus its non-identity channels
  * (`overrides`, `extra`). Everything left is identity, so a new top-level field is included
  * automatically and an override/extra addition is excluded automatically. Empty projections
  * collapse to `undefined` so a bag holding only reserved channels matches a bare item.
  */
+export const structuralStackKey: StackKeyOf = (_name, meta) => stackIdentity(meta)
+
 function stackIdentity(meta?: Meta): Meta | undefined {
   if (!meta) return undefined
   const { overrides, extra, ...identity } = meta as MetaEnvelope & Meta
   return Object.keys(identity).length > 0 ? identity : undefined
 }
 
+/** Equality of two stack-identity projections — deep for structural bags, `===` for narrowed keys. */
+function sameIdentity(a: unknown, b: unknown): boolean {
+  if (isPlainObject(a) && isPlainObject(b)) return sameMeta(a, b)
+  return a === b
+}
+
 /**
- * Stacking-identity equality — the decided default `stackKey`. Amends (does not replace) the
- * `sameMeta` rule: two stacks share identity when their envelope projections deep-equal, so a
- * stray `overrides`/`extra` field never fragments a stack. A kind may later substitute a
- * narrower projection, which then owns identity-completeness (the merge-loss footgun).
+ * Structural stacking-identity equality — the decided default `stackKey`. Amends (does not
+ * replace) the `sameMeta` rule: two stacks share identity when their envelope projections
+ * deep-equal, so a stray `overrides`/`extra` field never fragments a stack. A kind may substitute
+ * a narrower projection (factory `stackKey`), which then owns identity-completeness (the
+ * merge-loss footgun).
  */
 export function sameStackKey(a?: Meta, b?: Meta): boolean {
   return sameMeta(stackIdentity(a), stackIdentity(b))

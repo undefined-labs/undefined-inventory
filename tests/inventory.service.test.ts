@@ -17,11 +17,14 @@ import { InventoryEvents } from '../src/server/events/inventory-events'
 import { InventoryChangedEvent } from '../src/shared/events/inventory-event.types'
 import { TouchTracker } from '../src/server/subscribers/touch-tracker'
 import { InventoryService } from '../src/server/services/inventory.service'
+import { MetadataFactory } from '../src/server/registry/metadata-factory.registry'
 import { InMemoryInventoryStore } from './in-memory.store'
 
 const ITEMS: Record<string, ItemDefinition> = {
   water: { name: asItemName('water'), label: 'Water', weight: 100, stack: true },
   phone: { name: asItemName('phone'), label: 'Phone', weight: 200, stack: false },
+  // A stackable item of a kind whose factory narrows identity to `serial` alone.
+  token: { name: asItemName('token'), label: 'Token', weight: 10, stack: true, kind: 'weapon' },
 }
 
 class StaticItemRegistry extends ItemRegistryContract {
@@ -59,6 +62,7 @@ class AllowGive extends GiveAccessContract {
 function makeService(overrides?: {
   store?: InMemoryInventoryStore
   capacity?: CapacityPolicyContract
+  factories?: MetadataFactoryRegistry
 }): {
   service: InventoryService
   store: InMemoryInventoryStore
@@ -81,7 +85,7 @@ function makeService(overrides?: {
     new AllowGive(),
     new HookBus(),
     new ItemBehaviorRegistry(),
-    new MetadataFactoryRegistry(),
+    overrides?.factories ?? new MetadataFactoryRegistry(),
   )
   return { service, store, registry }
 }
@@ -313,5 +317,42 @@ describe('InventoryService.moveItem (cross-inventory)', () => {
     expect(from.getSlot(1)).toMatchObject({ name: 'water', count: 3 })
     expect(to.getItems()).toEqual([])
     expect(saveMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('factory stackKey override (consumed end-to-end)', () => {
+  // Register a kind whose factory narrows stacking identity to `serial` alone.
+  const bySerial = (): MetadataFactoryRegistry => {
+    const factories = new MetadataFactoryRegistry()
+    const factory: MetadataFactory = {
+      create: (_def, input) => ({ ...input }),
+      validate: (meta) => meta,
+      stackKey: (meta) => (meta.serial as string | undefined) ?? '',
+    }
+    factories.register('weapon', factory)
+    return factories
+  }
+
+  it('same serial + differing cosmetics stacks (narrower than the structural default)', async () => {
+    const { service } = makeService({ factories: bySerial() })
+    const id = stashInventoryId('locker-1')
+    const inv = await service.open('stash', id)
+
+    await service.addItem(id, 'token', 1, { serial: 'A', tint: 'blue' })
+    await service.addItem(id, 'token', 1, { serial: 'A', tint: 'red' })
+
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(2)
+  })
+
+  it('differing serials never stack', async () => {
+    const { service } = makeService({ factories: bySerial() })
+    const id = stashInventoryId('locker-2')
+    const inv = await service.open('stash', id)
+
+    await service.addItem(id, 'token', 1, { serial: 'A' })
+    await service.addItem(id, 'token', 1, { serial: 'B' })
+
+    expect(inv.getItems()).toHaveLength(2)
   })
 })

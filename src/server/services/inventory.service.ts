@@ -1,6 +1,6 @@
 import { inject, injectable } from 'tsyringe'
 import type { OpenCoreServerLibrary } from '@open-core/framework/server'
-import { Inventory, moveItem } from '../../shared/domain/inventory'
+import { Inventory, moveItem, structuralStackKey, StackKeyOf } from '../../shared/domain/inventory'
 import { AccessPolicyContract } from '../../shared/contracts/access-policy.contract'
 import { CapacityPolicyContract } from '../../shared/contracts/capacity-policy.contract'
 import { InventoryLockContract } from '../../shared/contracts/inventory-lock.contract'
@@ -91,7 +91,9 @@ export class InventoryService {
     // A container is never itself a holder (depth 1), so only non-container inventories roll up
     // contained weight — this also stops the rollup from recursing past one level.
     const options =
-      type === 'container' ? undefined : { extraWeightOf: this.containerWeightOf }
+      type === 'container'
+        ? { stackKeyOf: this.stackKeyOf }
+        : { extraWeightOf: this.containerWeightOf, stackKeyOf: this.stackKeyOf }
     const inv = serialized
       ? this.registry.from(serialized, capacity, options)
       : this.registry.create(type, id, capacity, options)
@@ -108,6 +110,18 @@ export class InventoryService {
    * currently open. An unopened container contributes nothing here — its weight only counts
    * once it (and thus its contents) is hydrated, matching ox's open-to-weigh behaviour.
    */
+  /**
+   * The stacking-identity projection handed to every aggregate: dispatch to the item's kind
+   * factory and use its `stackKey` override when present, else the structural envelope default.
+   * A missing def can't be projected by a factory, so it also falls back to structural.
+   */
+  private readonly stackKeyOf: StackKeyOf = (name, meta) => {
+    const def = this.items.get(name)
+    if (!def) return structuralStackKey(name, meta)
+    const factory = this.factories.resolve(def)
+    return factory.stackKey && meta ? factory.stackKey(meta) : structuralStackKey(name, meta)
+  }
+
   private readonly containerWeightOf = (slot: Slot): number => {
     const def = this.items.get(slot.name)
     const uid = slot.metadata?.uid as string | undefined
@@ -257,6 +271,7 @@ export class InventoryService {
         toSlot,
         count,
         (name) => this.requireItem(name),
+        this.stackKeyOf,
       )
 
       this.emitChanged(from, [fromChanged], 'move')
