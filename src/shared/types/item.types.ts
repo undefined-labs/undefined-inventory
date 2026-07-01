@@ -1,13 +1,16 @@
 /**
- * Data shapes for the inventory domain. Pure declarations — no logic, no imports.
+ * Data shapes for the inventory domain. Pure declarations — no logic.
  */
+import { ItemKind, ItemName } from './item-name'
 
 /** Arbitrary per-stack metadata — part of the merge key (order-independent compare). */
 export type Meta = Record<string, unknown>
 
 /** Static item template (ox data/items.lua). */
 export interface ItemDefinition {
-  name: string
+  name: ItemName
+  /** The item's kind; absent is treated as `baseItem`, so existing definitions need no change. */
+  kind?: ItemKind
   label: string
   /** grams, per single unit */
   weight: number
@@ -37,7 +40,8 @@ export interface ItemDefinition {
 export interface Slot {
   /** 1-based slot index */
   slot: number
-  name: string
+  /** Canonical key — normalised at hydration, so the live aggregate never re-case-folds. */
+  name: ItemName
   count: number
   /** cached weight = def.weight * count */
   weight: number
