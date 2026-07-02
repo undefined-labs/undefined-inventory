@@ -128,6 +128,15 @@ export interface SerializedInventory {
 export interface Capacity {
   slots: number
   maxWeight: number
+  /**
+   * The count of leading slots (`1..reservedSlots`) that auto-placement de-prioritises — a
+   * player's hotbar. Never a *first* choice for a spill/give/auto-place target: those fill the
+   * ordinary slots first and only fall back to a reserved slot when the rest is full. Existing
+   * stacks in reserved slots still top up (a merge is not a slot choice). Explicit moves
+   * (`moveItem`/`setSlot`) ignore this entirely — the user owns the hotbar directly. Defaults to
+   * 0 (no reserved slots), and, like the rest of capacity, is never persisted.
+   */
+  reservedSlots?: number
 }
 
 /**

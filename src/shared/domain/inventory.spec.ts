@@ -85,6 +85,53 @@ describe('Inventory stack caps (maxStack: merge to cap, spill to next empty)', (
   })
 })
 
+describe('Inventory reserved (hotbar) slots — auto-placement de-prioritises 1..reserved', () => {
+  // reserved 2, 5 slots → ordinary = 3,4,5; reserved (hotbar) = 1,2.
+  const capR = (slots: number, maxWeight: number, reservedSlots: number): Capacity => ({
+    slots,
+    maxWeight,
+    reservedSlots,
+  })
+
+  test('a fresh add lands in the first ordinary slot, skipping the reserved ones', () => {
+    const inv = new Inventory('player:h', 'player', capR(5, 1_000_000, 2))
+    expect(inv.addItem(phone, 1)).toEqual([3])
+    expect(inv.getSlot(1)).toBeNull()
+    expect(inv.getSlot(2)).toBeNull()
+  })
+
+  test('spill falls back to reserved slots only once every ordinary slot is full', () => {
+    const inv = new Inventory('player:h', 'player', capR(5, 1_000_000, 2))
+    expect(inv.addItem(phone, 3)).toEqual([3, 4, 5]) // fills all ordinary slots
+    expect(inv.addItem(phone, 1)).toEqual([1]) // now the lowest reserved slot
+    expect(inv.addItem(phone, 1)).toEqual([2])
+  })
+
+  test('firstFreeSlot prefers ordinary, then the lowest reserved, then null', () => {
+    const inv = new Inventory('player:h', 'player', capR(3, 1_000_000, 2)) // ordinary = {3}
+    expect(inv.firstFreeSlot()).toBe(3)
+    inv.addItem(phone, 1) // takes slot 3
+    expect(inv.firstFreeSlot()).toBe(1)
+    inv.addItem(phone, 2) // takes reserved 1 and 2
+    expect(inv.firstFreeSlot()).toBeNull()
+  })
+
+  test('an existing stack in a reserved slot still tops up (a merge is not a slot choice)', () => {
+    const inv = new Inventory('player:h', 'player', capR(5, 1_000_000, 2))
+    inv.setSlot(1, water, 3) // user placed water in the hotbar
+    inv.addItem(water, 2) // a pickup of the same item
+    expect(inv.getItems()).toHaveLength(1)
+    expect(inv.getSlot(1)!.count).toBe(5) // topped up in place, no ordinary slot opened
+  })
+
+  test('a full inventory (ordinary + reserved) still throws, mutating nothing', () => {
+    const inv = new Inventory('player:h', 'player', capR(3, 1_000_000, 2))
+    inv.addItem(phone, 3) // slots 3, 1, 2 — everything
+    expect(() => inv.addItem(phone, 1)).toThrow()
+    expect(inv.getItems()).toHaveLength(3)
+  })
+})
+
 describe('Inventory.removeItem (validate-before-mutate, no half-drain)', () => {
   test('partial remove decrements the stack, slot stays', () => {
     const inv = makeInventory()
