@@ -12,6 +12,35 @@ import {
 /** The library-local event bus. Subscribers (DirtySet, sync) listen here. */
 export const InventoryEvents = createServerLibrary('inventory')
 
+/** The internal events a consumer can subscribe to, mapped to the payload each carries. */
+export interface InventoryEventMap {
+  changed: InventoryChangedEvent
+  evicted: InventoryEvictedEvent
+}
+
+/**
+ * Typed subscription facade over {@link InventoryEvents}. The raw bus types every handler param as
+ * `payload?: T` (the emit contract allows a bare signal), forcing consumers to accept `T | undefined`
+ * even though every inventory emit above always passes a payload. This surface hands back a
+ * non-optional `T`, and passes the handler reference straight through so `off` still deregisters it.
+ */
+export const InventoryEventBus = {
+  on<K extends keyof InventoryEventMap>(
+    event: K,
+    handler: (payload: InventoryEventMap[K]) => void,
+  ): void {
+    // The bus types the param as `payload?: T`; every inventory emit passes one, so widening the
+    // handler to the optional-param form is sound and keeps the reference stable for `off`.
+    InventoryEvents.on<InventoryEventMap[K]>(event, handler as (payload?: InventoryEventMap[K]) => void)
+  },
+  off<K extends keyof InventoryEventMap>(
+    event: K,
+    handler: (payload: InventoryEventMap[K]) => void,
+  ): void {
+    InventoryEvents.off<InventoryEventMap[K]>(event, handler as (payload?: InventoryEventMap[K]) => void)
+  },
+}
+
 let bridgeExternalEvents = false
 
 export function configureInventoryEvents(options?: { bridgeExternalEvents?: boolean }): void {
