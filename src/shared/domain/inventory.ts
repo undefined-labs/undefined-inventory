@@ -20,6 +20,13 @@ export class Inventory {
   readonly slots: number
   readonly maxWeight: number
   /**
+   * The count of leading slots (`1..reserved`) auto-placement de-prioritises — the hotbar.
+   * Empty-slot targeting fills the ordinary slots first and only falls back to a reserved slot
+   * when the rest is full; merging into an existing reserved stack is unaffected. Resolved from
+   * capacity, so it is per-type and never persisted.
+   */
+  readonly reserved: number
+  /**
    * Memory-only inventory that is never written to the store (a ground drop). Still fully
    * evictable — when an ephemeral inventory is swept, the `evicted` signal lets a drop
    * resource despawn its world prop. Lives on the aggregate (not inferred from `type`) so the
@@ -52,6 +59,7 @@ export class Inventory {
     this.type = type
     this.slots = capacity.slots
     this.maxWeight = capacity.maxWeight
+    this.reserved = capacity.reservedSlots ?? 0
     this.ephemeral = options?.ephemeral ?? false
     this.extraWeightOf = options?.extraWeightOf ?? (() => 0)
     this.stackKeyOf = options?.stackKeyOf ?? structuralStackKey
@@ -189,7 +197,10 @@ export class Inventory {
     return [...this.items.values()]
   }
 
-  /** The lowest empty slot index, or `null` if full. Used to target a give server-side. */
+  /**
+   * The auto-placement target slot, or `null` if full. Used to target a give server-side.
+   * Prefers ordinary slots over reserved (hotbar) ones — see `firstEmptySlot`.
+   */
   firstFreeSlot(): number | null {
     return this.firstEmptySlot(new Set())
   }
@@ -216,8 +227,16 @@ export class Inventory {
     return new Inventory(serialized.id, serialized.type, capacity, serialized.items)
   }
 
+  /**
+   * The auto-placement target: the lowest empty ordinary slot, or — only when every ordinary
+   * slot is full — the lowest empty reserved (hotbar) slot, or `null` if the whole inventory is
+   * full. Reserved slots are a last resort so a spill/give/auto-place never consumes a hotbar
+   * slot while an ordinary one is free, yet a full-but-under-weight inventory can still accept.
+   */
   private firstEmptySlot(taken: ReadonlySet<number>): number | null {
-    for (let n = 1; n <= this.slots; n++)
+    for (let n = this.reserved + 1; n <= this.slots; n++)
+      if (!this.items.has(n) && !taken.has(n)) return n
+    for (let n = 1; n <= this.reserved; n++)
       if (!this.items.has(n) && !taken.has(n)) return n
     return null
   }
