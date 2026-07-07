@@ -408,6 +408,44 @@ export class InventoryService {
   }
 
   /**
+   * Edit the metadata of the item in `slot` in place — the sanctioned path for weapon ammo,
+   * attachments, durability, and any other per-instance state a resource must change without a
+   * remove/re-add. Runs under the inventory's lock (held across the await, like every other
+   * mutation) so it can't interleave with a concurrent move/use, is vetoable via `canMutate`, and
+   * emits `changed` through the service's own path so subscribers (dirty-set, sync) react. This
+   * is what replaces resources reaching into the live aggregate and hand-calling the raw emit.
+   */
+  async mutateItemMeta(
+    id: string,
+    slot: number,
+    mutator: (meta: Meta) => void | Meta,
+  ): Promise<void> {
+    if (!this.locks.acquire(id)) throw new InventoryError(`inventory '${id}' is locked`)
+    try {
+      const inv = this.requireOpen(id)
+      const item = inv.getSlot(slot)
+      if (!item) throw new InventoryError(`slot ${slot} is empty`)
+      // Pre-commit veto inside the critical section, carrying the pre-mutation bag so a hook
+      // gates on current state before the mutator runs.
+      if (
+        !this.hooks.canMutate({
+          kind: 'mutate',
+          inventoryId: id,
+          type: inv.type,
+          item: item.name,
+          slot,
+          metadata: item.metadata,
+        })
+      )
+        throw new InventoryError(`metadata mutation on '${id}' was vetoed`)
+      const changed = inv.mutateMetadata(slot, mutator)
+      this.emitChanged(inv, [changed], 'mutate')
+    } finally {
+      this.locks.release(id)
+    }
+  }
+
+  /**
    * Run a single-inventory domain mutation and emit `inventory:changed`. The lock is held
    * across awaits so a concurrent mutation on the same id can't interleave. Persistence is
    * left to the DirtySet subscriber listening on the event.

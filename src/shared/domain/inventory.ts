@@ -193,6 +193,23 @@ export class Inventory {
     })
   }
 
+  /**
+   * Edit one slot's metadata in place. The mutator receives a private clone (so a throw mid-edit
+   * leaves the live slot untouched — no half-applied bag) and either mutates it or returns a
+   * replacement. An empty result collapses to no metadata so the slot round-trips thin. Returns
+   * the changed slot number. Stacking identity is projected on demand by `stackKeyOf`, so an edit
+   * that shifts identity simply reprojects on the next compare — it never auto-merges into a
+   * sibling stack (matching ox in-place semantics).
+   */
+  mutateMetadata(slotNumber: number, mutator: (meta: Meta) => void | Meta): number {
+    const slot = this.items.get(slotNumber)
+    if (!slot) throw new InventoryError(`slot ${slotNumber} is empty`)
+    const draft = structuredClone(slot.metadata ?? {})
+    const next = mutator(draft) ?? draft
+    slot.metadata = Object.keys(next).length > 0 ? next : undefined
+    return slotNumber
+  }
+
   getItems(): Slot[] {
     return [...this.items.values()]
   }
