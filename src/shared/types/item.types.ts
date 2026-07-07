@@ -1,5 +1,6 @@
 /**
- * Data shapes for the inventory domain. Pure declarations — no logic.
+ * Data shapes for the inventory domain — plus the pure guards that narrow the opaque `Meta`
+ * bag back to a named shape (no I/O, no framework).
  */
 import { ItemKind, ItemName } from './item-name'
 
@@ -46,6 +47,32 @@ export type WeaponMeta = MetaEnvelope & {
   ammo: number
   components: ItemName[]
   durabilityAt?: number
+}
+
+/**
+ * Structural guard for {@link WeaponMeta}: true when the four identity/state fields are present
+ * with the right primitive shape. `durabilityAt` is optional bookkeeping, so it is not checked.
+ * Lets a caller narrow an opaque {@link Meta} bag without an unchecked `as` cast.
+ */
+export function isWeaponMeta(meta: unknown): meta is WeaponMeta {
+  if (typeof meta !== 'object' || meta === null) return false
+  const bag = meta as Record<string, unknown>
+  return (
+    typeof bag.serial === 'string' &&
+    typeof bag.durability === 'number' &&
+    typeof bag.ammo === 'number' &&
+    Array.isArray(bag.components)
+  )
+}
+
+/**
+ * Narrow an opaque {@link Meta} bag to {@link WeaponMeta}, throwing if it is not weapon-shaped.
+ * The typed replacement for the accidental `as WeaponMeta` cast — a non-weapon bag fails loudly
+ * at the boundary instead of surfacing as a later `undefined` field read.
+ */
+export function asWeaponMeta(meta: unknown): WeaponMeta {
+  if (!isWeaponMeta(meta)) throw new TypeError('metadata is not weapon-shaped')
+  return meta
 }
 
 /**
