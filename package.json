@@ -1,6 +1,6 @@
 {
   "name": "@undefined-labs/inventory",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Headless inventory domain library for OpenCore runtime",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -19,6 +19,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "src",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
