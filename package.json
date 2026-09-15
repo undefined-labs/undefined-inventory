@@ -1,11 +1,29 @@
 {
-  "name": "@open-core/inventory",
+  "name": "@undefined-labs/inventory",
   "version": "0.0.1",
   "description": "Headless inventory domain library for OpenCore runtime",
-  "license": "MPL-2.0",
-  "type": "module",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/undefined-labs/opencore-inventory.git"
+  },
+  "homepage": "https://github.com/undefined-labs/opencore-inventory#readme",
+  "bugs": {
+    "url": "https://github.com/undefined-labs/opencore-inventory/issues"
+  },
+  "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,21 +45,31 @@
       "import": "./dist/client/index.js",
       "require": "./dist/client/index.js"
     },
+    "./shared/testing": {
+      "types": "./dist/shared/testing/store-conformance.d.ts",
+      "import": "./dist/shared/testing/store-conformance.js",
+      "require": "./dist/shared/testing/store-conformance.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
+    "prepublishOnly": "pnpm run clean && pnpm run build",
     "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "@open-core/framework": "*",
+    "@open-core/framework": "^1.1.0",
     "reflect-metadata": "^0.2.2",
-    "tsyringe": "^4.10.0"
+    "tsyringe": "^4.10.0",
+    "vitest": "^2.1.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@citizenfx/server": "2.0.31623-1",
