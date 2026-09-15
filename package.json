@@ -8,11 +8,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/undefined-labs/opencore-inventory.git"
+    "url": "git+https://github.com/undefined-labs/undefined-inventory.git"
   },
-  "homepage": "https://github.com/undefined-labs/opencore-inventory#readme",
+  "homepage": "https://github.com/undefined-labs/undefined-inventory#readme",
   "bugs": {
-    "url": "https://github.com/undefined-labs/opencore-inventory/issues"
+    "url": "https://github.com/undefined-labs/undefined-inventory/issues"
   },
   "type": "commonjs",
   "main": "dist/index.js",

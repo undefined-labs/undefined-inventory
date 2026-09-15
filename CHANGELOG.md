@@ -20,10 +20,10 @@ All notable changes to this project are documented in this file.
 
 - Foundation domain, thin store contract, ids + conformance kit
 - Branded ItemName + kind discriminant
-- Skeleton orchestration — open/add/remove/emit/persist + plugin ([#2](https://github.com/undefined-labs/opencore-inventory/pull/2))
-- MoveItem — move/split/swap/merge within and across inventories ([#3](https://github.com/undefined-labs/opencore-inventory/pull/3))
-- Shutdown drain awaits in-flight save before final flush ([#4](https://github.com/undefined-labs/opencore-inventory/pull/4))
-- Viewers + sync targeting + client↔NUI protocol ([#5](https://github.com/undefined-labs/opencore-inventory/pull/5))
+- Skeleton orchestration — open/add/remove/emit/persist + plugin ([#2](https://github.com/undefined-labs/undefined-inventory/pull/2))
+- MoveItem — move/split/swap/merge within and across inventories ([#3](https://github.com/undefined-labs/undefined-inventory/pull/3))
+- Shutdown drain awaits in-flight save before final flush ([#4](https://github.com/undefined-labs/undefined-inventory/pull/4))
+- Viewers + sync targeting + client↔NUI protocol ([#5](https://github.com/undefined-labs/undefined-inventory/pull/5))
 - Eviction predicate (idle, zero-viewers, no-locks)
 - Drop + give + ephemeral drop lifecycle
 - Item-backed containers (own-row, weight rollup, orphan-GC, depth 1)

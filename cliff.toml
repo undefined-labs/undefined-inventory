@@ -50,5 +50,5 @@ commit_parsers = [
 
 # Merge commits carry the PR number; link it back to the PR.
 commit_preprocessors = [
-  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/undefined-labs/opencore-inventory/pull/${1}))" },
+  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/undefined-labs/undefined-inventory/pull/${1}))" },
 ]
