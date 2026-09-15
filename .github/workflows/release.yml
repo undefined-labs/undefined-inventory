@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      # Required for npm provenance and Trusted Publishing (OIDC).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # A release can be cut from any commit, so re-verify rather than
+      # trusting that CI passed on whatever this tag points at.
+      - run: pnpm run typecheck
+
+      - run: pnpm test
+
+      - name: Check tag matches package version
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag $tag does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      # prepublishOnly runs clean + build, so dist is always fresh.
+      - name: Publish
+        run: pnpm publish --access public --no-git-checks --provenance
