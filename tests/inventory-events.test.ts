@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  InventoryEventBus,
   InventoryEvents,
   configureInventoryEvents,
+  emitInventoryChanged,
   emitInventoryEvicted,
 } from '../src/server/events/inventory-events'
+import { InventoryChangedEvent } from '../src/shared/events/inventory-event.types'
 
 /**
  * `evicted` fires internally for every eviction (any subscriber may react), but crosses the
@@ -54,5 +57,32 @@ describe('emitInventoryEvicted external scoping', () => {
     emitInventoryEvicted({ inventoryId: 'drop:1', type: 'drop' })
 
     expect(external).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The typed facade hands subscribers a non-optional payload (the raw bus types every handler as
+ * `payload?: T`) while passing the handler reference straight through, so `off` still deregisters.
+ */
+describe('InventoryEventBus typed subscription', () => {
+  it('delivers the changed payload and stops after off (stable handler identity)', () => {
+    const seen: InventoryChangedEvent[] = []
+    const handler = (event: InventoryChangedEvent): void => {
+      seen.push(event)
+    }
+    const event: InventoryChangedEvent = {
+      inventoryId: 'stash:a',
+      type: 'stash',
+      changes: [],
+      weight: 0,
+      reason: 'mutate',
+    }
+
+    InventoryEventBus.on('changed', handler)
+    emitInventoryChanged(event)
+    InventoryEventBus.off('changed', handler)
+    emitInventoryChanged(event)
+
+    expect(seen).toEqual([event])
   })
 })

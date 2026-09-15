@@ -320,6 +320,117 @@ describe('InventoryService.moveItem (cross-inventory)', () => {
   })
 })
 
+describe('InventoryService.mutateItemMeta', () => {
+  it('edits a slot metadata in place under lock and emits a changed with reason mutate', async () => {
+    const { service } = makeService({ factories: (() => {
+      const factories = new MetadataFactoryRegistry()
+      factories.register('weapon', {
+        create: (_def, input) => ({ ...input }),
+        validate: (meta) => meta,
+        stackKey: (meta) => (meta.serial as string | undefined) ?? '',
+      })
+      return factories
+    })() })
+    const id = stashInventoryId('locker-1')
+    const inv = await service.open('stash', id)
+    await service.addItem(id, 'token', 1, { serial: 'A', ammo: 0 })
+
+    const events: InventoryChangedEvent[] = []
+    const handler = (e?: unknown) => events.push(e as InventoryChangedEvent)
+    InventoryEvents.on('changed', handler)
+    await service.mutateItemMeta(id, 1, (meta) => {
+      meta.ammo = 30
+    })
+    InventoryEvents.off('changed', handler)
+
+    expect(inv.getSlot(1)!.metadata).toMatchObject({ serial: 'A', ammo: 30 })
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ inventoryId: id, reason: 'mutate' })
+    expect(events[0]!.changes).toEqual([
+      { slot: 1, item: expect.objectContaining({ name: 'token', metadata: expect.objectContaining({ ammo: 30 }) }) },
+    ])
+  })
+
+  it('refuses to mutate metadata while the inventory lock is already held', async () => {
+    const store = new InMemoryInventoryStore()
+    const lock = new InMemoryInventoryLock()
+    const registry = new InventoryRegistry()
+    const service = new InventoryService(
+      store,
+      new StaticItemRegistry(),
+      new FixedCapacityPolicy(10, 5000),
+      registry,
+      lock,
+      InventoryEvents,
+      new ViewerRegistry(),
+      new AllowAccess(),
+      new NoopSync(),
+      new TouchTracker(InventoryEvents),
+      new AllowGive(),
+      new HookBus(),
+      new ItemBehaviorRegistry(),
+      new MetadataFactoryRegistry(),
+    )
+    const id = stashInventoryId('locker-1')
+    const inv = await service.open('stash', id)
+    await service.addItem(id, 'water', 1)
+
+    expect(lock.acquire(id)).toBe(true)
+    await expect(service.mutateItemMeta(id, 1, (m) => { m.tag = 'x' })).rejects.toThrow()
+    expect(inv.getSlot(1)!.metadata).toBeUndefined()
+
+    lock.release(id)
+    await service.mutateItemMeta(id, 1, (m) => { m.tag = 'x' })
+    expect(inv.getSlot(1)!.metadata).toMatchObject({ tag: 'x' })
+  })
+
+  it('a hook veto aborts the mutation, leaving metadata untouched', async () => {
+    const store = new InMemoryInventoryStore()
+    const hooks = new HookBus()
+    hooks.register({ filter: { kinds: ['mutate'] }, canMutate: () => false })
+    const registry = new InventoryRegistry()
+    const service = new InventoryService(
+      store,
+      new StaticItemRegistry(),
+      new FixedCapacityPolicy(10, 5000),
+      registry,
+      new InMemoryInventoryLock(),
+      InventoryEvents,
+      new ViewerRegistry(),
+      new AllowAccess(),
+      new NoopSync(),
+      new TouchTracker(InventoryEvents),
+      new AllowGive(),
+      hooks,
+      new ItemBehaviorRegistry(),
+      new MetadataFactoryRegistry(),
+    )
+    const id = stashInventoryId('locker-1')
+    const inv = await service.open('stash', id)
+    await service.addItem(id, 'water', 1, { tag: 'keep' })
+
+    await expect(service.mutateItemMeta(id, 1, (m) => { m.tag = 'changed' })).rejects.toThrow(/vetoed/)
+    expect(inv.getSlot(1)!.metadata).toMatchObject({ tag: 'keep' })
+  })
+
+  it('a throw inside the mutator leaves the live slot metadata untouched (atomic)', async () => {
+    const { service } = makeService()
+    const id = stashInventoryId('locker-1')
+    const inv = await service.open('stash', id)
+    await service.addItem(id, 'water', 1, { tags: ['a'] })
+
+    await expect(
+      service.mutateItemMeta(id, 1, (m) => {
+        ;(m.tags as string[]).push('b')
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
+
+    // The nested array must not have been mutated — the mutator worked on a private clone.
+    expect(inv.getSlot(1)!.metadata).toEqual({ tags: ['a'] })
+  })
+})
+
 describe('factory stackKey override (consumed end-to-end)', () => {
   // Register a kind whose factory narrows stacking identity to `serial` alone.
   const bySerial = (): MetadataFactoryRegistry => {

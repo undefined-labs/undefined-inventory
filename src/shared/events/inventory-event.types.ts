@@ -1,7 +1,7 @@
 import { Slot } from '../types/item.types'
 
 /** Why a change fired — rides on the public envelope so observers can branch. */
-export type ChangeReason = 'add' | 'remove' | 'move' | 'use'
+export type ChangeReason = 'add' | 'remove' | 'move' | 'use' | 'mutate'
 
 /**
  * One slot's new authoritative state. `item: null` means the slot emptied. State, not

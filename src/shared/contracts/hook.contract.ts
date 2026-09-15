@@ -11,6 +11,9 @@ export type MutationEvent =
       item: string
       count: number
     }
+  // An in-place metadata edit on one slot (weapon ammo/attachments, etc.). `metadata` is the
+  // pre-mutation bag, so a hook gates on current state before the mutator runs.
+  | { kind: 'mutate'; inventoryId: string; type: string; item: string; slot: number; metadata?: Meta }
 
 /** Narrows which events a hook is consulted for. An omitted facet matches everything. */
 export interface HookFilter {
