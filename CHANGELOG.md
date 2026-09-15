@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.2 - 2026-09-15
+
+### Build
+
+- Ship src alongside dist so consumers can compile from source
+
+### Features
+
+- Typed WeaponMeta narrowing guards
+- Typed InventoryEventBus subscription facade
+- MutateItemMeta service API for in-place metadata edits ([#43](https://github.com/undefined-labs/undefined-inventory/pull/43))
+
 ## 0.0.1 - 2026-09-15
 
 ### Bug fixes
