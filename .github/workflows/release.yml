@@ -27,11 +27,21 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
+      # No registry-url: it writes an .npmrc with _authToken=${NODE_AUTH_TOKEN},
+      # and that placeholder token is what pnpm authenticates with instead of
+      # exchanging the OIDC id-token for a publish token.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1, and the runner ships 10.9.8.
+      # setup-node has no input for the npm version, so install it explicitly.
+      # pnpm still does install/test; only the publish goes through npm.
+      - name: Pin a trusted-publishing-capable npm
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - run: pnpm install --frozen-lockfile
 
@@ -50,6 +60,8 @@ jobs:
             exit 1
           fi
 
+      # Published with npm rather than pnpm: pnpm 10 delegates publish to the
+      # npm CLI anyway, and only npm >= 11.5.1 performs the OIDC exchange.
       # prepublishOnly runs clean + build, so dist is always fresh.
       - name: Publish
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: npm publish --access public --provenance
