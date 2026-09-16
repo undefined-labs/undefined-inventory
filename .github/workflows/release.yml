@@ -35,6 +35,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Trusted publishing needs npm >= 11.5.1, and the runner ships 10.9.8.
+      # setup-node has no input for the npm version, so install it explicitly.
+      # pnpm still does install/test; only the publish goes through npm.
+      - name: Pin a trusted-publishing-capable npm
+        run: |
+          npm install -g npm@latest
+          npm --version
+
       - run: pnpm install --frozen-lockfile
 
       # A release can be cut from any commit, so re-verify rather than
@@ -52,6 +60,8 @@ jobs:
             exit 1
           fi
 
+      # Published with npm rather than pnpm: pnpm 10 delegates publish to the
+      # npm CLI anyway, and only npm >= 11.5.1 performs the OIDC exchange.
       # prepublishOnly runs clean + build, so dist is always fresh.
       - name: Publish
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: npm publish --access public --provenance
